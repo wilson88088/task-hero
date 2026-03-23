@@ -748,7 +748,7 @@
     <h2 id="resultTitle"></h2>
     <div class="result-stats" id="resultStats"></div>
     <div class="mt-20">
-      <button class="btn btn-primary" onclick="showPage('home')">🏠 回到首頁</button>
+      <button class="btn btn-primary" id="btnBackHome" onclick="showPage('home')">🏠 回到首頁</button>
     </div>
   </div>
 </div>
@@ -894,8 +894,9 @@
   <button class="celeb-close-btn" onclick="closeCelebration()">🎉 太棒了！繼續</button>
 </div>
 
-<!-- Hidden file input for celebration media -->
-<input type="file" id="celebFileInput" accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm,.jpg,.jpeg,.png,.gif,.heic" style="display:none;" onchange="handleCelebFile(event)">
+<!-- Hidden file inputs for celebration media (success / fail) -->
+<input type="file" id="celebFileInputSuccess" accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm,.jpg,.jpeg,.png,.gif,.heic" style="display:none;" onchange="handleCelebFile(event, 'success')">
+<input type="file" id="celebFileInputFail" accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm,.jpg,.jpeg,.png,.gif,.heic" style="display:none;" onchange="handleCelebFile(event, 'fail')">
 
 <!-- ========== SPECIAL PERFORMANCE MODAL ========== -->
 <div class="modal-overlay" id="specialPwModal">
@@ -973,13 +974,12 @@ function loadData() {
 }
 
 function saveData(data) {
-  // Strip out any legacy base64 celebrationMedia before saving to localStorage
+  // Strip out any base64 data before saving to localStorage (media lives in IndexedDB)
   const clone = JSON.parse(JSON.stringify(data));
   if (clone.tasks) {
     clone.tasks.forEach(t => {
-      // Only keep the mediaKey reference, not the actual data URL
       if (t.celebrationMedia && t.celebrationMedia.startsWith('data:')) {
-        delete t.celebrationMedia; // will be in IndexedDB
+        delete t.celebrationMedia;
       }
     });
   }
@@ -1033,28 +1033,52 @@ async function deleteMediaFromDB(key) {
   });
 }
 
-// Generate a unique media key for a task
-function mediaKey(taskIdx) {
+// Generate a unique media key for a task; variant = 'success' | 'fail'
+function mediaKey(taskIdx, variant) {
   const task = appData.tasks[taskIdx];
-  // Use task name + index as stable key
-  return 'celeb_' + taskIdx + '_' + (task ? task.name : '');
+  const suffix = variant ? ('_' + variant) : '';
+  return 'celeb_' + taskIdx + '_' + (task ? task.name : '') + suffix;
 }
 
-// Migrate any legacy base64 data from localStorage to IndexedDB
+// Migrate legacy single-media data to new dual success/fail structure
 async function migrateLegacyMedia() {
   let migrated = false;
   for (let i = 0; i < appData.tasks.length; i++) {
     const t = appData.tasks[i];
+    // Migrate inline base64 to IndexedDB (very old format)
     if (t.celebrationMedia && t.celebrationMedia.startsWith('data:')) {
-      const key = mediaKey(i);
+      const key = mediaKey(i, 'success');
       await saveMediaToDB(key, t.celebrationMedia);
-      t.celebrationMediaKey = key;
+      t.celebSuccessKey = key;
+      t.celebSuccessType = t.celebrationMediaType || 'image';
+      t.celebSuccessFileName = t.celebrationFileName || '已設定檔案';
+      t.celebSameForBoth = true;
       delete t.celebrationMedia;
+      delete t.celebrationMediaKey;
+      delete t.celebrationMediaType;
+      delete t.celebrationFileName;
+      migrated = true;
+    }
+    // Migrate old single IndexedDB key to new dual-key structure
+    if (t.celebrationMediaKey && !t.celebSuccessKey) {
+      const oldData = await getMediaFromDB(t.celebrationMediaKey);
+      if (oldData) {
+        const newKey = mediaKey(i, 'success');
+        await saveMediaToDB(newKey, oldData);
+        t.celebSuccessKey = newKey;
+        t.celebSuccessType = t.celebrationMediaType || 'image';
+        t.celebSuccessFileName = t.celebrationFileName || '已設定檔案';
+        t.celebSameForBoth = true;
+        try { await deleteMediaFromDB(t.celebrationMediaKey); } catch(e) {}
+      }
+      delete t.celebrationMediaKey;
+      delete t.celebrationMediaType;
+      delete t.celebrationFileName;
       migrated = true;
     }
   }
   if (migrated) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+    saveData(appData);
   }
 }
 migrateLegacyMedia();
@@ -1187,23 +1211,55 @@ function renderAdmin() {
           </div>`;
       }).join('');
 
-      // Celebration media setting
-      const hasCelebMedia = !!(task.celebrationMediaKey || task.celebrationMedia);
-      const celebFileName = task.celebrationFileName || '已設定檔案';
-      const celebType = task.celebrationMediaType === 'video' ? '🎥 影片' : '🖼️ 圖片';
-      const celebHtml = hasCelebMedia
-        ? `<div class="celeb-setting">
-             <div class="celeb-label">🎬 慶祝畫面</div>
-             <div class="celeb-path">${celebType}：${esc(celebFileName)}</div>
-             <div class="celeb-actions">
-               <button class="btn btn-primary btn-small" style="padding:3px 10px;font-size:0.8em;" onclick="pickCelebMedia(${i})">更換</button>
-               <button class="btn btn-danger btn-small" style="padding:3px 10px;font-size:0.8em;" onclick="removeCelebMedia(${i})">移除</button>
-               <button class="btn btn-success btn-small" style="padding:3px 10px;font-size:0.8em;" onclick="previewCelebMedia(${i})">預覽</button>
-             </div>
-           </div>`
-        : `<div class="celeb-setting" style="text-align:center;">
-             <button class="btn btn-warning btn-small" style="padding:4px 14px;font-size:0.85em;" onclick="pickCelebMedia(${i})">🎬 設定慶祝畫面</button>
-           </div>`;
+      // Celebration media setting (success / fail / same for both)
+      const hasSuccessMedia = !!task.celebSuccessKey;
+      const hasFailMedia = !!task.celebFailKey;
+      const hasCelebMedia = hasSuccessMedia || hasFailMedia;
+      const celebSame = !!task.celebSameForBoth;
+
+      function celebRow(label, hasMedia, variant, idx) {
+        if (hasMedia) {
+          const fName = variant === 'success' ? (task.celebSuccessFileName || '已設定') : (task.celebFailFileName || '已設定');
+          const fType = (variant === 'success' ? task.celebSuccessType : task.celebFailType) === 'video' ? '🎥 影片' : '🖼️ 圖片';
+          return `<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
+            <span style="font-size:0.85em;min-width:70px;">${label}</span>
+            <span style="font-size:0.8em;color:#666;">${fType}：${esc(fName)}</span>
+            <button class="btn btn-primary btn-small" style="padding:2px 8px;font-size:0.75em;" onclick="pickCelebMedia(${idx},'${variant}')">更換</button>
+            <button class="btn btn-danger btn-small" style="padding:2px 8px;font-size:0.75em;" onclick="removeCelebMedia(${idx},'${variant}')">移除</button>
+            <button class="btn btn-success btn-small" style="padding:2px 8px;font-size:0.75em;" onclick="previewCelebMedia(${idx},'${variant}')">預覽</button>
+          </div>`;
+        }
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;">
+          <span style="font-size:0.85em;min-width:70px;">${label}</span>
+          <button class="btn btn-warning btn-small" style="padding:2px 10px;font-size:0.8em;" onclick="pickCelebMedia(${idx},'${variant}')">設定</button>
+        </div>`;
+      }
+
+      let celebHtml;
+      if (celebSame) {
+        celebHtml = `<div class="celeb-setting">
+          <div class="celeb-label">🎬 慶祝畫面 <span style="font-size:0.8em;color:#888;">(成功/失敗 相同)</span></div>
+          ${celebRow('🎬 畫面', hasSuccessMedia, 'success', i)}
+          <label style="font-size:0.82em;display:flex;align-items:center;gap:5px;margin-top:4px;cursor:pointer;">
+            <input type="checkbox" checked onchange="toggleCelebSame(${i}, this.checked)"> 成功與失敗使用相同畫面
+          </label>
+        </div>`;
+      } else {
+        celebHtml = `<div class="celeb-setting">
+          <div class="celeb-label">🎬 慶祝畫面</div>
+          ${celebRow('✅ 成功', hasSuccessMedia, 'success', i)}
+          ${celebRow('❌ 失敗', hasFailMedia, 'fail', i)}
+          <label style="font-size:0.82em;display:flex;align-items:center;gap:5px;margin-top:4px;cursor:pointer;">
+            <input type="checkbox" onchange="toggleCelebSame(${i}, this.checked)"> 成功與失敗使用相同畫面
+          </label>
+        </div>`;
+      }
+
+      if (!hasCelebMedia && !celebSame) {
+        celebHtml = `<div class="celeb-setting" style="text-align:center;">
+          <button class="btn btn-warning btn-small" style="padding:4px 14px;font-size:0.85em;" onclick="initCelebSetup(${i})">🎬 設定慶祝畫面</button>
+        </div>`;
+      }
 
       return `
         <div class="task-item" style="flex-direction:column;align-items:stretch;">
@@ -1631,14 +1687,33 @@ function showResult() {
     ? '太棒了！你在時間內完成了所有任務，獲得 1 點獎勵！'
     : '任務完成！但超過了預計時間，繼續加油！';
 
-  const hasCeleb = !!(task.celebrationMediaKey || task.celebrationMedia);
+  // Determine if there is any celebration media for this task
+  const hasCeleb = !!(task.celebSuccessKey || task.celebFailKey || task.celebrationMediaKey || task.celebrationMedia);
   const celebTask = task; // capture reference
+  const celebPassed = passed; // capture pass/fail for media selection
+
+  // If celebration media exists, disable "回到首頁" until celebration is closed
+  const btnBackHome = document.getElementById('btnBackHome');
+  if (hasCeleb && btnBackHome) {
+    btnBackHome.disabled = true;
+    btnBackHome.style.opacity = '0.4';
+    btnBackHome.style.cursor = 'not-allowed';
+  }
+
   speak(speechText, () => {
     if (hasCeleb) {
       setTimeout(async () => {
-        const mediaSrc = await getCelebMediaSrc(celebTask);
+        const mediaSrc = await getCelebMediaSrc(celebTask, celebPassed);
         if (mediaSrc) {
-          showCelebration(mediaSrc, celebTask.celebrationMediaType, celebTask.name);
+          const mType = getCelebMediaType(celebTask, celebPassed);
+          showCelebration(mediaSrc, mType, celebTask.name);
+        } else {
+          // Media not found, re-enable button
+          if (btnBackHome) {
+            btnBackHome.disabled = false;
+            btnBackHome.style.opacity = '';
+            btnBackHome.style.cursor = '';
+          }
         }
       }, 300);
     }
@@ -2115,35 +2190,68 @@ function cancelWheel() {
 }
 
 // ============================================
-// CELEBRATION MEDIA
+// CELEBRATION MEDIA (success / fail / same)
 // ============================================
 let celebPickingTaskIdx = -1;
+let celebPickingVariant = 'success'; // 'success' or 'fail'
 
-function pickCelebMedia(taskIdx) {
-  celebPickingTaskIdx = taskIdx;
-  document.getElementById('celebFileInput').click();
+// First-time setup: initialize celebSameForBoth and show success picker
+function initCelebSetup(taskIdx) {
+  appData.tasks[taskIdx].celebSameForBoth = true;
+  saveData(appData);
+  renderAdmin();
+  // Auto-open file picker for success media
+  setTimeout(() => pickCelebMedia(taskIdx, 'success'), 100);
 }
 
-function handleCelebFile(event) {
+function toggleCelebSame(taskIdx, checked) {
+  const task = appData.tasks[taskIdx];
+  task.celebSameForBoth = checked;
+  if (checked && task.celebFailKey) {
+    // Remove separate fail media when switching to "same"
+    try { deleteMediaFromDB(task.celebFailKey); } catch(e) {}
+    delete task.celebFailKey;
+    delete task.celebFailType;
+    delete task.celebFailFileName;
+  }
+  saveData(appData);
+  renderAdmin();
+}
+
+function pickCelebMedia(taskIdx, variant) {
+  celebPickingTaskIdx = taskIdx;
+  celebPickingVariant = variant || 'success';
+  const inputId = variant === 'fail' ? 'celebFileInputFail' : 'celebFileInputSuccess';
+  document.getElementById(inputId).click();
+}
+
+function handleCelebFile(event, variant) {
   const file = event.target.files[0];
   if (!file) return;
   const idx = celebPickingTaskIdx;
   if (idx < 0 || idx >= appData.tasks.length) return;
+  const v = variant || celebPickingVariant || 'success';
 
   const reader = new FileReader();
   reader.onload = async function(e) {
     const dataUrl = e.target.result;
     const type = file.type.startsWith('video') ? 'video' : 'image';
-    const key = mediaKey(idx);
+    const key = mediaKey(idx, v);
 
-    // Save large media to IndexedDB, only keep reference in appData
     try {
       await saveMediaToDB(key, dataUrl);
-      appData.tasks[idx].celebrationMediaKey = key;
-      appData.tasks[idx].celebrationMediaType = type;
-      appData.tasks[idx].celebrationFileName = file.name;
-      // Remove any legacy inline data
+      if (v === 'success') {
+        appData.tasks[idx].celebSuccessKey = key;
+        appData.tasks[idx].celebSuccessType = type;
+        appData.tasks[idx].celebSuccessFileName = file.name;
+      } else {
+        appData.tasks[idx].celebFailKey = key;
+        appData.tasks[idx].celebFailType = type;
+        appData.tasks[idx].celebFailFileName = file.name;
+      }
+      // Remove any legacy fields
       delete appData.tasks[idx].celebrationMedia;
+      delete appData.tasks[idx].celebrationMediaKey;
       saveData(appData);
       renderAdmin();
     } catch (err) {
@@ -2154,11 +2262,24 @@ function handleCelebFile(event) {
   event.target.value = '';
 }
 
-async function removeCelebMedia(taskIdx) {
+async function removeCelebMedia(taskIdx, variant) {
   const task = appData.tasks[taskIdx];
-  if (task.celebrationMediaKey) {
-    try { await deleteMediaFromDB(task.celebrationMediaKey); } catch(e) {}
+  if (variant === 'fail') {
+    if (task.celebFailKey) {
+      try { await deleteMediaFromDB(task.celebFailKey); } catch(e) {}
+    }
+    delete task.celebFailKey;
+    delete task.celebFailType;
+    delete task.celebFailFileName;
+  } else {
+    if (task.celebSuccessKey) {
+      try { await deleteMediaFromDB(task.celebSuccessKey); } catch(e) {}
+    }
+    delete task.celebSuccessKey;
+    delete task.celebSuccessType;
+    delete task.celebSuccessFileName;
   }
+  // Clean up legacy
   delete task.celebrationMediaKey;
   delete task.celebrationMedia;
   delete task.celebrationMediaType;
@@ -2167,22 +2288,49 @@ async function removeCelebMedia(taskIdx) {
   renderAdmin();
 }
 
-async function previewCelebMedia(taskIdx) {
+async function previewCelebMedia(taskIdx, variant) {
   const task = appData.tasks[taskIdx];
-  const mediaSrc = await getCelebMediaSrc(task);
+  const mediaSrc = await getCelebMediaForVariant(task, variant);
   if (!mediaSrc) { alert('找不到慶祝畫面檔案'); return; }
-  showCelebration(mediaSrc, task.celebrationMediaType, task.name);
+  const mType = variant === 'fail' ? task.celebFailType : task.celebSuccessType;
+  showCelebration(mediaSrc, mType || 'image', task.name);
 }
 
-// Get the media source: try IndexedDB key first, fallback to legacy inline data
-async function getCelebMediaSrc(task) {
+// Get the media source for a specific variant
+async function getCelebMediaForVariant(task, variant) {
+  const key = variant === 'fail' ? task.celebFailKey : task.celebSuccessKey;
+  if (key) {
+    const data = await getMediaFromDB(key);
+    if (data) return data;
+  }
+  // Legacy fallback
   if (task.celebrationMediaKey) {
     const data = await getMediaFromDB(task.celebrationMediaKey);
     if (data) return data;
   }
-  // Legacy fallback
   if (task.celebrationMedia) return task.celebrationMedia;
   return null;
+}
+
+// Get celebration media source based on pass/fail result
+async function getCelebMediaSrc(task, passed) {
+  // If "same for both" or only success media exists, use success media
+  if (task.celebSameForBoth || passed !== false) {
+    return await getCelebMediaForVariant(task, 'success');
+  }
+  // Failed: try fail media first, fallback to success
+  const failSrc = await getCelebMediaForVariant(task, 'fail');
+  if (failSrc) return failSrc;
+  return await getCelebMediaForVariant(task, 'success');
+}
+
+// Get the media type based on pass/fail result
+function getCelebMediaType(task, passed) {
+  if (task.celebSameForBoth || passed !== false) {
+    return task.celebSuccessType || 'image';
+  }
+  if (task.celebFailKey) return task.celebFailType || 'image';
+  return task.celebSuccessType || 'image';
 }
 
 function showCelebration(mediaSrc, mediaType, taskName) {
@@ -2209,6 +2357,13 @@ function closeCelebration() {
   container.innerHTML = '';
   // Remove confetti
   document.querySelectorAll('.confetti-piece').forEach(el => el.remove());
+  // Re-enable "回到首頁" button
+  const btnBackHome = document.getElementById('btnBackHome');
+  if (btnBackHome) {
+    btnBackHome.disabled = false;
+    btnBackHome.style.opacity = '';
+    btnBackHome.style.cursor = '';
+  }
 }
 
 function launchConfetti() {
@@ -2247,10 +2402,23 @@ async function exportData() {
     // Deep clone tasks and embed media data for portability
     const tasksClone = JSON.parse(JSON.stringify(appData.tasks));
     for (const t of tasksClone) {
+      if (t.celebSuccessKey) {
+        try {
+          const d = await getMediaFromDB(t.celebSuccessKey);
+          if (d) t._celebSuccessDataUrl = d;
+        } catch(e) {}
+      }
+      if (t.celebFailKey) {
+        try {
+          const d = await getMediaFromDB(t.celebFailKey);
+          if (d) t._celebFailDataUrl = d;
+        } catch(e) {}
+      }
+      // Legacy support
       if (t.celebrationMediaKey) {
         try {
-          const mediaData = await getMediaFromDB(t.celebrationMediaKey);
-          if (mediaData) t._celebrationDataUrl = mediaData;
+          const d = await getMediaFromDB(t.celebrationMediaKey);
+          if (d) t._celebrationDataUrl = d;
         } catch(e) {}
       }
     }
@@ -2369,13 +2537,37 @@ async function confirmImport() {
     }
     for (let i = 0; i < data.tasks.length; i++) {
       const t = appData.tasks[startIdx + i];
-      if (t._celebrationDataUrl) {
-        const key = 'celeb_' + (startIdx + i) + '_' + (t.name || '');
+      const tName = t.name || '';
+      // Restore success media
+      if (t._celebSuccessDataUrl) {
+        const key = 'celeb_' + (startIdx + i) + '_' + tName + '_success';
+        try {
+          await saveMediaToDB(key, t._celebSuccessDataUrl);
+          t.celebSuccessKey = key;
+        } catch(e) {}
+        delete t._celebSuccessDataUrl;
+      }
+      // Restore fail media
+      if (t._celebFailDataUrl) {
+        const key = 'celeb_' + (startIdx + i) + '_' + tName + '_fail';
+        try {
+          await saveMediaToDB(key, t._celebFailDataUrl);
+          t.celebFailKey = key;
+        } catch(e) {}
+        delete t._celebFailDataUrl;
+      }
+      // Legacy import support
+      if (t._celebrationDataUrl && !t.celebSuccessKey) {
+        const key = 'celeb_' + (startIdx + i) + '_' + tName + '_success';
         try {
           await saveMediaToDB(key, t._celebrationDataUrl);
-          t.celebrationMediaKey = key;
+          t.celebSuccessKey = key;
+          t.celebSuccessType = t.celebrationMediaType || 'image';
+          t.celebSuccessFileName = t.celebrationFileName || '已設定檔案';
+          t.celebSameForBoth = true;
         } catch(e) {}
         delete t._celebrationDataUrl;
+        delete t.celebrationMediaKey;
       }
     }
     importedCount.tasks = data.tasks.length;
