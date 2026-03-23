@@ -895,7 +895,7 @@
 </div>
 
 <!-- Hidden file input for celebration media -->
-<input type="file" id="celebFileInput" accept="image/*,video/*" style="display:none;" onchange="handleCelebFile(event)">
+<input type="file" id="celebFileInput" accept="image/*,video/*,.mp4,.mov,.avi,.mkv,.webm,.jpg,.jpeg,.png,.gif,.heic" style="display:none;" onchange="handleCelebFile(event)">
 
 <!-- ========== SPECIAL PERFORMANCE MODAL ========== -->
 <div class="modal-overlay" id="specialPwModal">
@@ -959,9 +959,12 @@
 
 <script>
 // ============================================
-// DATA LAYER (localStorage)
+// DATA LAYER (localStorage + IndexedDB for media)
 // ============================================
 const STORAGE_KEY = 'taskTimerApp';
+const IDB_NAME = 'taskTimerMediaDB';
+const IDB_STORE = 'celebrationMedia';
+const IDB_VERSION = 1;
 
 function loadData() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -970,10 +973,91 @@ function loadData() {
 }
 
 function saveData(data) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  // Strip out any legacy base64 celebrationMedia before saving to localStorage
+  const clone = JSON.parse(JSON.stringify(data));
+  if (clone.tasks) {
+    clone.tasks.forEach(t => {
+      // Only keep the mediaKey reference, not the actual data URL
+      if (t.celebrationMedia && t.celebrationMedia.startsWith('data:')) {
+        delete t.celebrationMedia; // will be in IndexedDB
+      }
+    });
+  }
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(clone));
 }
 
 let appData = loadData();
+
+// --- IndexedDB helper for large media files ---
+function openMediaDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(IDB_STORE)) {
+        db.createObjectStore(IDB_STORE);
+      }
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function saveMediaToDB(key, dataUrl) {
+  const db = await openMediaDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).put(dataUrl, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+async function getMediaFromDB(key) {
+  const db = await openMediaDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readonly');
+    const req = tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+async function deleteMediaFromDB(key) {
+  const db = await openMediaDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_STORE, 'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+// Generate a unique media key for a task
+function mediaKey(taskIdx) {
+  const task = appData.tasks[taskIdx];
+  // Use task name + index as stable key
+  return 'celeb_' + taskIdx + '_' + (task ? task.name : '');
+}
+
+// Migrate any legacy base64 data from localStorage to IndexedDB
+async function migrateLegacyMedia() {
+  let migrated = false;
+  for (let i = 0; i < appData.tasks.length; i++) {
+    const t = appData.tasks[i];
+    if (t.celebrationMedia && t.celebrationMedia.startsWith('data:')) {
+      const key = mediaKey(i);
+      await saveMediaToDB(key, t.celebrationMedia);
+      t.celebrationMediaKey = key;
+      delete t.celebrationMedia;
+      migrated = true;
+    }
+  }
+  if (migrated) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(appData));
+  }
+}
+migrateLegacyMedia();
 
 // ============================================
 // NAVIGATION
@@ -1104,10 +1188,10 @@ function renderAdmin() {
       }).join('');
 
       // Celebration media setting
-      const celebPath = task.celebrationMedia || '';
+      const hasCelebMedia = !!(task.celebrationMediaKey || task.celebrationMedia);
       const celebFileName = task.celebrationFileName || '已設定檔案';
       const celebType = task.celebrationMediaType === 'video' ? '🎥 影片' : '🖼️ 圖片';
-      const celebHtml = celebPath
+      const celebHtml = hasCelebMedia
         ? `<div class="celeb-setting">
              <div class="celeb-label">🎬 慶祝畫面</div>
              <div class="celeb-path">${celebType}：${esc(celebFileName)}</div>
@@ -1547,11 +1631,15 @@ function showResult() {
     ? '太棒了！你在時間內完成了所有任務，獲得 1 點獎勵！'
     : '任務完成！但超過了預計時間，繼續加油！';
 
-  const hasCeleb = !!task.celebrationMedia;
+  const hasCeleb = !!(task.celebrationMediaKey || task.celebrationMedia);
+  const celebTask = task; // capture reference
   speak(speechText, () => {
     if (hasCeleb) {
-      setTimeout(() => {
-        showCelebration(task.celebrationMedia, task.celebrationMediaType, task.name);
+      setTimeout(async () => {
+        const mediaSrc = await getCelebMediaSrc(celebTask);
+        if (mediaSrc) {
+          showCelebration(mediaSrc, celebTask.celebrationMediaType, celebTask.name);
+        }
       }, 300);
     }
   });
@@ -2042,33 +2130,59 @@ function handleCelebFile(event) {
   const idx = celebPickingTaskIdx;
   if (idx < 0 || idx >= appData.tasks.length) return;
 
-  // Convert to base64 data URL for local storage
   const reader = new FileReader();
-  reader.onload = function(e) {
+  reader.onload = async function(e) {
     const dataUrl = e.target.result;
     const type = file.type.startsWith('video') ? 'video' : 'image';
-    appData.tasks[idx].celebrationMedia = dataUrl;
-    appData.tasks[idx].celebrationMediaType = type;
-    appData.tasks[idx].celebrationFileName = file.name;
-    saveData(appData);
-    renderAdmin();
+    const key = mediaKey(idx);
+
+    // Save large media to IndexedDB, only keep reference in appData
+    try {
+      await saveMediaToDB(key, dataUrl);
+      appData.tasks[idx].celebrationMediaKey = key;
+      appData.tasks[idx].celebrationMediaType = type;
+      appData.tasks[idx].celebrationFileName = file.name;
+      // Remove any legacy inline data
+      delete appData.tasks[idx].celebrationMedia;
+      saveData(appData);
+      renderAdmin();
+    } catch (err) {
+      alert('儲存慶祝畫面失敗：' + err.message);
+    }
   };
   reader.readAsDataURL(file);
   event.target.value = '';
 }
 
-function removeCelebMedia(taskIdx) {
-  delete appData.tasks[taskIdx].celebrationMedia;
-  delete appData.tasks[taskIdx].celebrationMediaType;
-  delete appData.tasks[taskIdx].celebrationFileName;
+async function removeCelebMedia(taskIdx) {
+  const task = appData.tasks[taskIdx];
+  if (task.celebrationMediaKey) {
+    try { await deleteMediaFromDB(task.celebrationMediaKey); } catch(e) {}
+  }
+  delete task.celebrationMediaKey;
+  delete task.celebrationMedia;
+  delete task.celebrationMediaType;
+  delete task.celebrationFileName;
   saveData(appData);
   renderAdmin();
 }
 
-function previewCelebMedia(taskIdx) {
+async function previewCelebMedia(taskIdx) {
   const task = appData.tasks[taskIdx];
-  if (!task.celebrationMedia) return;
-  showCelebration(task.celebrationMedia, task.celebrationMediaType, task.name);
+  const mediaSrc = await getCelebMediaSrc(task);
+  if (!mediaSrc) { alert('找不到慶祝畫面檔案'); return; }
+  showCelebration(mediaSrc, task.celebrationMediaType, task.name);
+}
+
+// Get the media source: try IndexedDB key first, fallback to legacy inline data
+async function getCelebMediaSrc(task) {
+  if (task.celebrationMediaKey) {
+    const data = await getMediaFromDB(task.celebrationMediaKey);
+    if (data) return data;
+  }
+  // Legacy fallback
+  if (task.celebrationMedia) return task.celebrationMedia;
+  return null;
 }
 
 function showCelebration(mediaSrc, mediaType, taskName) {
@@ -2119,7 +2233,7 @@ function launchConfetti() {
 // ============================================
 // EXPORT / IMPORT
 // ============================================
-function exportData() {
+async function exportData() {
   const inclTasks = document.getElementById('exportTasks').checked;
   const inclRewards = document.getElementById('exportRewards').checked;
   const inclRecords = document.getElementById('exportRecords').checked;
@@ -2130,7 +2244,17 @@ function exportData() {
 
   const exportObj = { _appId: 'taskTimerApp', _exportDate: new Date().toISOString(), _includes: {} };
   if (inclTasks) {
-    exportObj.tasks = appData.tasks;
+    // Deep clone tasks and embed media data for portability
+    const tasksClone = JSON.parse(JSON.stringify(appData.tasks));
+    for (const t of tasksClone) {
+      if (t.celebrationMediaKey) {
+        try {
+          const mediaData = await getMediaFromDB(t.celebrationMediaKey);
+          if (mediaData) t._celebrationDataUrl = mediaData;
+        } catch(e) {}
+      }
+    }
+    exportObj.tasks = tasksClone;
     exportObj._includes.tasks = true;
   }
   if (inclRewards) {
@@ -2225,7 +2349,7 @@ function showImportPreview(data) {
   openModal('importConfirmModal');
 }
 
-function confirmImport() {
+async function confirmImport() {
   if (!pendingImportData) return;
   const data = pendingImportData;
   const inclTasks = document.getElementById('importTasks').checked;
@@ -2236,10 +2360,23 @@ function confirmImport() {
   let importedCount = { tasks: 0, rewards: 0, records: 0 };
 
   if (inclTasks && data.tasks) {
+    // Restore any embedded media to IndexedDB
+    const startIdx = merge ? appData.tasks.length : 0;
     if (merge) {
       appData.tasks = appData.tasks.concat(data.tasks);
     } else {
       appData.tasks = data.tasks;
+    }
+    for (let i = 0; i < data.tasks.length; i++) {
+      const t = appData.tasks[startIdx + i];
+      if (t._celebrationDataUrl) {
+        const key = 'celeb_' + (startIdx + i) + '_' + (t.name || '');
+        try {
+          await saveMediaToDB(key, t._celebrationDataUrl);
+          t.celebrationMediaKey = key;
+        } catch(e) {}
+        delete t._celebrationDataUrl;
+      }
     }
     importedCount.tasks = data.tasks.length;
   }
