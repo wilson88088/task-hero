@@ -173,6 +173,130 @@
   .subtask-edit-row .edit-name { flex: 2; }
   .subtask-edit-row .edit-time { flex: 1; min-width: 80px; }
 
+  /* ===== Home: expandable subtask list ===== */
+  .home-task-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    flex: 1;
+    min-width: 0;
+  }
+  .home-subtask-list {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+  }
+  .home-subtask-list.expanded {
+    max-height: 500px;
+  }
+  .home-subtask-list .home-sub-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px 6px 24px;
+    font-size: 0.9em;
+    color: #555;
+    border-bottom: 1px dashed #eee;
+  }
+  .home-subtask-list .home-sub-item:last-child { border-bottom: none; }
+  .expand-arrow {
+    display: inline-block;
+    transition: transform 0.25s;
+    font-size: 0.8em;
+    color: #999;
+    margin-right: 6px;
+  }
+  .expand-arrow.open { transform: rotate(90deg); }
+
+  /* ===== Admin: task name edit ===== */
+  .admin-task-name-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+    min-width: 0;
+  }
+  .admin-task-name-row .task-name {
+    cursor: pointer;
+  }
+  .admin-task-name-row .task-name:hover {
+    text-decoration: underline;
+    text-decoration-style: dashed;
+    text-underline-offset: 3px;
+  }
+  .admin-task-total-time {
+    font-size: 0.82em;
+    color: #999;
+    white-space: nowrap;
+    background: #f0ecf5;
+    padding: 2px 8px;
+    border-radius: 10px;
+  }
+
+  /* ===== Execution: subtask sidebar checklist ===== */
+  .exec-layout {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+  }
+  .exec-main { flex: 1; text-align: center; }
+  .exec-sidebar {
+    width: 200px;
+    flex-shrink: 0;
+    background: #f8f9ff;
+    border-radius: 12px;
+    padding: 12px;
+    text-align: left;
+  }
+  .exec-sidebar h4 {
+    font-size: 0.85em;
+    color: #764ba2;
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .exec-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 0;
+    font-size: 0.82em;
+    color: #666;
+    border-bottom: 1px solid #eee;
+  }
+  .exec-sidebar-item:last-child { border-bottom: none; }
+  .exec-sidebar-item .sidebar-icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9em;
+  }
+  .exec-sidebar-item.done { color: #11998e; }
+  .exec-sidebar-item.active { color: #764ba2; font-weight: 600; }
+  .exec-sidebar-item.pending-sub { color: #bbb; }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+  .spinner-icon {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #764ba2;
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+  }
+
+  /* Responsive: stack sidebar below on small screens */
+  @media (max-width: 600px) {
+    .exec-layout { flex-direction: column-reverse; }
+    .exec-sidebar { width: 100%; }
+  }
+
   /* ===== Execution Screen ===== */
   .exec-container { text-align: center; }
   .exec-task-name {
@@ -727,17 +851,22 @@
 
 <!-- ========== EXECUTION PAGE ========== -->
 <div id="page-exec" class="page">
-  <div class="card exec-container">
+  <div class="card">
     <div class="subtask-progress" id="execProgress"></div>
-    <div class="exec-task-name" id="execSubName"></div>
-    <div class="exec-sub-label" id="execInstruction"></div>
-    <div class="timer-display" id="execTimer">0</div>
-    <div class="progress-bar-container">
-      <div class="progress-bar" id="execProgressBar" style="width:0%"></div>
+    <div class="exec-layout">
+      <div class="exec-main">
+        <div class="exec-task-name" id="execSubName"></div>
+        <div class="exec-sub-label" id="execInstruction"></div>
+        <div class="timer-display" id="execTimer">0</div>
+        <div class="progress-bar-container">
+          <div class="progress-bar" id="execProgressBar" style="width:0%"></div>
+        </div>
+        <button class="btn btn-success btn-small" id="execDoneBtn" onclick="completeSubtask()" style="display:none;padding:16px 50px;font-size:1.2em;">
+          ✅ 完成！
+        </button>
+      </div>
+      <div class="exec-sidebar" id="execSidebar"></div>
     </div>
-    <button class="btn btn-success btn-small" id="execDoneBtn" onclick="completeSubtask()" style="display:none;padding:16px 50px;font-size:1.2em;">
-      ✅ 完成！
-    </button>
   </div>
 </div>
 
@@ -1142,15 +1271,27 @@ function renderHome() {
     const totalSec = task.subtasks.reduce((s, st) => s + st.time, 0);
     const timeStr = formatTimeLabel(totalSec);
     const subCount = task.subtasks.length;
+    const subListHtml = task.subtasks.map((st, j) => `
+      <div class="home-sub-item">
+        <span>${j+1}. ${esc(st.name)}</span>
+        <span style="color:#999;">⏱ ${formatTimeLabel(st.time)}</span>
+      </div>`).join('');
     return `
-      <div class="task-item fade-in">
-        <div class="task-info">
-          <div class="task-name">${esc(task.name)}</div>
-          <div class="task-time">📎 ${subCount} 個子任務 ・ ⏱ 預計 ${timeStr}</div>
+      <div class="task-item fade-in" style="flex-direction:column;align-items:stretch;">
+        <div style="display:flex;align-items:center;justify-content:space-between;">
+          <div class="home-task-header" onclick="toggleHomeExpand(${i})">
+            <div class="task-info">
+              <div class="task-name"><span class="expand-arrow" id="homeArrow${i}">▶</span> ${esc(task.name)}</div>
+              <div class="task-time">📎 ${subCount} 個子任務 ・ ⏱ 預計 ${timeStr}</div>
+            </div>
+          </div>
+          <button class="btn btn-success btn-small" onclick="startTask(${i})" ${subCount===0?'disabled':''}>
+            ▶ 開始
+          </button>
         </div>
-        <button class="btn btn-success btn-small" onclick="startTask(${i})" ${subCount===0?'disabled':''}>
-          ▶ 開始
-        </button>
+        <div class="home-subtask-list" id="homeSubList${i}">
+          ${subListHtml || '<div style="padding:8px 14px;color:#bbb;font-size:0.9em;">尚無子任務</div>'}
+        </div>
       </div>`;
   }).join('');
 }
@@ -1160,6 +1301,26 @@ function formatTimeLabel(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分鐘`;
+}
+
+// Toggle home page subtask expand/collapse
+function toggleHomeExpand(taskIdx) {
+  const list = document.getElementById('homeSubList' + taskIdx);
+  const arrow = document.getElementById('homeArrow' + taskIdx);
+  if (!list) return;
+  list.classList.toggle('expanded');
+  if (arrow) arrow.classList.toggle('open');
+}
+
+// Edit task name in admin page
+function startEditTaskName(taskIdx) {
+  const task = appData.tasks[taskIdx];
+  const newName = prompt('編輯任務名稱：', task.name);
+  if (newName !== null && newName.trim() !== '') {
+    appData.tasks[taskIdx].name = newName.trim();
+    saveData(appData);
+    renderAdmin();
+  }
 }
 
 // ============================================
@@ -1261,11 +1422,17 @@ function renderAdmin() {
         </div>`;
       }
 
+      const totalTimeSec = task.subtasks.reduce((s, st) => s + st.time, 0);
+      const totalTimeStr = totalTimeSec > 0 ? formatTimeLabel(totalTimeSec) : '0 秒';
+
       return `
         <div class="task-item" style="flex-direction:column;align-items:stretch;">
           <div class="flex-between mb-10">
-            <div class="task-name">${esc(task.name)}</div>
-            <div>
+            <div class="admin-task-name-row">
+              <div class="task-name" onclick="startEditTaskName(${i})" title="點擊編輯名稱">${esc(task.name)}</div>
+              <span class="admin-task-total-time">⏱ ${totalTimeStr}</span>
+            </div>
+            <div style="flex-shrink:0;">
               <button class="btn btn-primary btn-small" onclick="showAddSubTask(${i})">＋ 子任務</button>
               <button class="btn btn-danger btn-small" onclick="removeMainTask(${i})">刪除</button>
             </div>
@@ -1559,6 +1726,27 @@ function startTask(taskIndex) {
   runSubtask();
 }
 
+function renderExecSidebar() {
+  const task = appData.tasks[execState.taskIndex];
+  const sidebar = document.getElementById('execSidebar');
+  if (!sidebar || !task) return;
+  sidebar.innerHTML = '<h4>📋 子任務列表</h4>' + task.subtasks.map((st, j) => {
+    let cls = 'exec-sidebar-item';
+    let icon = '';
+    if (j < execState.subIndex) {
+      cls += ' done';
+      icon = '<span class="sidebar-icon">✅</span>';
+    } else if (j === execState.subIndex) {
+      cls += ' active';
+      icon = '<span class="sidebar-icon"><span class="spinner-icon"></span></span>';
+    } else {
+      cls += ' pending-sub';
+      icon = '<span class="sidebar-icon">○</span>';
+    }
+    return `<div class="${cls}">${icon}<span>${esc(st.name)}</span></div>`;
+  }).join('');
+}
+
 function runSubtask() {
   const task = appData.tasks[execState.taskIndex];
   const sub = task.subtasks[execState.subIndex];
@@ -1574,6 +1762,9 @@ function runSubtask() {
   document.getElementById('execTimer').className = 'timer-display';
   document.getElementById('execProgressBar').style.width = '0%';
   document.getElementById('execDoneBtn').style.display = 'none';
+
+  // Update sidebar checklist
+  renderExecSidebar();
 
   // TTS
   speak(`請在 ${speakTime(sub.time)} 內完成 ${sub.name}，完成後請點擊完成`, () => {
@@ -1620,6 +1811,9 @@ function completeSubtask() {
 
   execState.subIndex++;
   const task = appData.tasks[execState.taskIndex];
+
+  // Update sidebar to reflect completion
+  renderExecSidebar();
 
   if (execState.subIndex < task.subtasks.length) {
     // Next subtask
