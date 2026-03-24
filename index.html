@@ -340,6 +340,115 @@
     margin-bottom: 20px;
   }
 
+  /* ===== Card Gallery ===== */
+  .card-category-section { margin-bottom: 24px; }
+  .card-category-title {
+    font-size: 1.05em;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 20px;
+    display: inline-block;
+    margin-bottom: 12px;
+  }
+  .card-category-title.common  { background: #f0f0f0; color: #666; }
+  .card-category-title.silver  { background: linear-gradient(135deg,#e0e0e0,#c0c0c0); color: #444; }
+  .card-category-title.gold    { background: linear-gradient(135deg,#ffe066,#f5a623); color: #7a4800; }
+  .card-category-title.diamond { background: linear-gradient(135deg,#a8edff,#5bc8fb); color: #005a7a; }
+  .card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+  }
+  .card-thumb {
+    position: relative;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #f0f0f0;
+    aspect-ratio: 2/3;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  .card-thumb:hover { transform: scale(1.04); box-shadow: 0 4px 16px rgba(0,0,0,0.18); }
+  .card-thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .card-thumb .card-label {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: rgba(0,0,0,0.5);
+    color: #fff;
+    font-size: 0.72em;
+    padding: 3px 6px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .card-thumb.silver { box-shadow: 0 2px 8px rgba(180,180,180,0.6); border: 2px solid #c0c0c0; }
+  .card-thumb.gold   { box-shadow: 0 2px 12px rgba(245,166,35,0.5); border: 2px solid #f5a623; }
+  .card-thumb.diamond{ box-shadow: 0 2px 12px rgba(91,200,251,0.5); border: 2px solid #5bc8fb; }
+  .card-empty-cat { color: #bbb; font-size: 0.88em; padding: 6px 0 12px; }
+
+  /* Card lightbox */
+  .card-lightbox {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.85);
+    z-index: 1000;
+    display: flex; align-items: center; justify-content: center;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s;
+  }
+  .card-lightbox.show { opacity: 1; pointer-events: all; }
+  .card-lightbox img {
+    max-width: 90vw; max-height: 85vh;
+    border-radius: 12px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+  }
+  .card-lightbox-close {
+    position: absolute; top: 16px; right: 20px;
+    color: #fff; font-size: 2em; cursor: pointer;
+    background: none; border: none;
+    line-height: 1;
+  }
+  .card-lightbox-name {
+    position: absolute; bottom: 20px;
+    color: #fff; font-size: 1em;
+    background: rgba(0,0,0,0.5);
+    padding: 6px 16px; border-radius: 20px;
+  }
+
+  /* Admin card management */
+  .card-admin-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    background: #f8f9ff;
+    border-radius: 10px;
+    margin-bottom: 8px;
+    border: 1px solid #eee;
+  }
+  .card-admin-thumb {
+    width: 44px; height: 66px;
+    border-radius: 6px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #ddd;
+  }
+  .card-admin-info { flex: 1; min-width: 0; }
+  .card-admin-info .card-admin-name { font-weight: 600; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .card-admin-info .card-admin-cat  { font-size: 0.8em; color: #888; margin-top: 2px; }
+  .card-type-badge {
+    font-size: 0.72em; padding: 2px 8px;
+    border-radius: 10px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .badge-common  { background:#f0f0f0; color:#666; }
+  .badge-silver  { background:#e0e0e0; color:#444; }
+  .badge-gold    { background:#ffe066; color:#7a4800; }
+  .badge-diamond { background:#a8edff; color:#005a7a; }
+
   /* ===== Result Screen ===== */
   .result-icon { font-size: 5em; margin: 20px 0; }
   .result-pass { color: #11998e; }
@@ -761,6 +870,7 @@
   <div class="logo">⏱️ 任務小幫手</div>
   <div class="nav-btns">
     <button id="navHome" class="active" onclick="showPage('home')">🏠 首頁</button>
+    <button id="navCards" onclick="showPage('cards')">🃏 圖鑑</button>
     <button id="navReward" onclick="showPage('reward')">🏆 獎勵</button>
     <button id="navAdmin" onclick="promptPassword()">⚙️ 管理</button>
   </div>
@@ -772,6 +882,21 @@
     <h2>📋 我的任務</h2>
     <div id="homeTaskList"></div>
   </div>
+</div>
+
+<!-- ========== CARDS PAGE ========== -->
+<div id="page-cards" class="page">
+  <div class="card">
+    <h2>🃏 圖鑑</h2>
+    <div id="cardGallery"></div>
+  </div>
+</div>
+
+<!-- Card lightbox overlay -->
+<div class="card-lightbox" id="cardLightbox" onclick="closeCardLightbox(event)">
+  <button class="card-lightbox-close" onclick="closeCardLightbox()">✕</button>
+  <img id="cardLightboxImg" src="" alt="">
+  <div class="card-lightbox-name" id="cardLightboxName"></div>
 </div>
 
 <!-- ========== ADMIN PAGE ========== -->
@@ -846,6 +971,64 @@
         <div class="import-result" id="importResult"></div>
       </div>
     </div>
+  </div>
+
+  <!-- Card Management -->
+  <div class="card">
+    <div class="flex-between mb-20">
+      <h2>🃏 圖鑑管理</h2>
+      <span style="font-size:0.85em;color:#888;" id="cardAdminCount"></span>
+    </div>
+
+    <!-- Add card controls -->
+    <div style="background:#f8f9ff;border-radius:12px;padding:16px;margin-bottom:16px;">
+      <div style="font-weight:600;margin-bottom:10px;color:#555;">➕ 新增圖鑑</div>
+
+      <!-- Category selector -->
+      <div style="margin-bottom:10px;">
+        <label style="margin-bottom:4px;">類別</label>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+            <input type="radio" name="cardCat" value="common" checked> 普卡
+          </label>
+          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+            <input type="radio" name="cardCat" value="silver"> 銀卡
+          </label>
+          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+            <input type="radio" name="cardCat" value="gold"> 金卡
+          </label>
+          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+            <input type="radio" name="cardCat" value="diamond"> 鑽石卡
+          </label>
+        </div>
+      </div>
+
+      <!-- Card name -->
+      <div style="margin-bottom:10px;">
+        <label style="margin-bottom:4px;">圖鑑名稱（選填）</label>
+        <input type="text" id="cardNameInput" placeholder="例：皮卡丘、No.025…" style="margin-bottom:0;">
+      </div>
+
+      <!-- Method A: local file -->
+      <div style="margin-bottom:8px;">
+        <div style="font-size:0.9em;color:#666;margin-bottom:6px;">📁 方法 A：選擇本機圖片</div>
+        <input type="file" id="cardFileInput" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic" style="display:none;" onchange="handleCardFile(event)">
+        <button class="btn btn-primary btn-small" onclick="document.getElementById('cardFileInput').click()">選擇圖片</button>
+      </div>
+
+      <!-- Method B: JSON URL file -->
+      <div style="border-top:1px solid #e5e5e5;padding-top:10px;">
+        <div style="font-size:0.9em;color:#666;margin-bottom:6px;">📄 方法 B：載入 JSON 定義檔（內含圖片 URL）</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="file" id="cardJsonInput" accept=".json" style="display:none;" onchange="handleCardJson(event)">
+          <button class="btn btn-warning btn-small" onclick="document.getElementById('cardJsonInput').click()">選擇 JSON 檔</button>
+          <span style="font-size:0.78em;color:#aaa;">格式：[{"name":"…","url":"https://…"}, …]</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Existing cards list -->
+    <div id="cardAdminList"></div>
   </div>
 </div>
 
@@ -1094,12 +1277,13 @@
 const STORAGE_KEY = 'taskTimerApp';
 const IDB_NAME = 'taskTimerMediaDB';
 const IDB_STORE = 'celebrationMedia';
-const IDB_VERSION = 1;
+const IDB_CARD_STORE = 'cardMedia';
+const IDB_VERSION = 2;
 
 function loadData() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) return JSON.parse(raw);
-  return { tasks: [], records: [], score: 0, rewards: [], specials: [] };
+  return { tasks: [], records: [], score: 0, rewards: [], specials: [], cards: [] };
 }
 
 function saveData(data) {
@@ -1116,6 +1300,7 @@ function saveData(data) {
 }
 
 let appData = loadData();
+if (!appData.cards) appData.cards = [];
 
 // --- IndexedDB helper for large media files ---
 function openMediaDB() {
@@ -1126,9 +1311,41 @@ function openMediaDB() {
       if (!db.objectStoreNames.contains(IDB_STORE)) {
         db.createObjectStore(IDB_STORE);
       }
+      if (!db.objectStoreNames.contains(IDB_CARD_STORE)) {
+        db.createObjectStore(IDB_CARD_STORE);
+      }
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
+  });
+}
+
+// Card-specific IndexedDB helpers
+async function saveCardToDB(key, dataUrl) {
+  const db = await openMediaDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_CARD_STORE, 'readwrite');
+    tx.objectStore(IDB_CARD_STORE).put(dataUrl, key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+async function getCardFromDB(key) {
+  const db = await openMediaDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_CARD_STORE, 'readonly');
+    const req = tx.objectStore(IDB_CARD_STORE).get(key);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+async function deleteCardFromDB(key) {
+  const db = await openMediaDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(IDB_CARD_STORE, 'readwrite');
+    tx.objectStore(IDB_CARD_STORE).delete(key);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -1223,8 +1440,9 @@ function showPage(name) {
   if (navBtn) navBtn.classList.add('active');
 
   if (name === 'home') renderHome();
-  if (name === 'admin') renderAdmin();
+  if (name === 'admin') { renderAdmin(); renderCardAdmin(); }
   if (name === 'reward') renderReward();
+  if (name === 'cards') renderCards();
 }
 
 function promptPassword() {
@@ -2852,6 +3070,181 @@ function speakTime(sec) {
   const m = Math.floor(sec / 60);
   const s = sec % 60;
   return s > 0 ? `${m} 分 ${s} 秒` : `${m} 分鐘`;
+}
+
+// ============================================
+// CARD GALLERY (圖鑑)
+// ============================================
+const CARD_CATEGORIES = [
+  { key: 'common',  label: '普卡',   cls: 'common'  },
+  { key: 'silver',  label: '銀卡',   cls: 'silver'  },
+  { key: 'gold',    label: '金卡',   cls: 'gold'    },
+  { key: 'diamond', label: '鑽石卡', cls: 'diamond' },
+];
+const CAT_LABELS = { common:'普卡', silver:'銀卡', gold:'金卡', diamond:'鑽石卡' };
+
+// ---- Render gallery page ----
+async function renderCards() {
+  const container = document.getElementById('cardGallery');
+  if (!container) return;
+  if (!appData.cards || appData.cards.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🃏</div><p>還沒有圖鑑喔！<br>請到「管理」頁面新增</p></div>`;
+    return;
+  }
+  let html = '';
+  for (const cat of CARD_CATEGORIES) {
+    const cards = appData.cards.filter(c => c.category === cat.key);
+    html += `<div class="card-category-section">
+      <div class="card-category-title ${cat.cls}">${cat.label}（${cards.length} 張）</div>`;
+    if (cards.length === 0) {
+      html += `<div class="card-empty-cat">尚無 ${cat.label}</div>`;
+    } else {
+      html += `<div class="card-grid">`;
+      for (const card of cards) {
+        const src = await resolveCardSrc(card);
+        const safeName = esc(card.name || '');
+        html += `<div class="card-thumb ${cat.cls}" onclick="openCardLightbox('${card.id}')">
+          <img src="${src || ''}" alt="${safeName}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22150%22><rect fill=%22%23eee%22 width=%22100%22 height=%22150%22/><text x=%2250%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%23bbb%22>?</text></svg>'">
+          ${safeName ? `<div class="card-label">${safeName}</div>` : ''}
+        </div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  container.innerHTML = html;
+}
+
+// Resolve image src: IndexedDB key → URL
+async function resolveCardSrc(card) {
+  if (card.idbKey) {
+    const data = await getCardFromDB(card.idbKey);
+    if (data) return data;
+  }
+  if (card.url) return card.url;
+  return '';
+}
+
+// ---- Lightbox ----
+async function openCardLightbox(cardId) {
+  const card = (appData.cards || []).find(c => c.id === cardId);
+  if (!card) return;
+  const src = await resolveCardSrc(card);
+  const lb = document.getElementById('cardLightbox');
+  document.getElementById('cardLightboxImg').src = src;
+  document.getElementById('cardLightboxName').textContent =
+    (card.name ? card.name + ' · ' : '') + (CAT_LABELS[card.category] || '');
+  lb.classList.add('show');
+}
+function closeCardLightbox(e) {
+  if (e && e.target !== document.getElementById('cardLightbox') &&
+      !e.target.classList.contains('card-lightbox-close')) return;
+  document.getElementById('cardLightbox').classList.remove('show');
+  document.getElementById('cardLightboxImg').src = '';
+}
+
+// ---- Admin: render card list ----
+async function renderCardAdmin() {
+  const list = document.getElementById('cardAdminList');
+  const count = document.getElementById('cardAdminCount');
+  if (!list) return;
+  const cards = appData.cards || [];
+  if (count) count.textContent = `共 ${cards.length} 張`;
+  if (cards.length === 0) {
+    list.innerHTML = '<div style="color:#bbb;text-align:center;padding:12px;">尚無圖鑑</div>';
+    return;
+  }
+  let html = '';
+  for (let i = 0; i < cards.length; i++) {
+    const card = cards[i];
+    const src = await resolveCardSrc(card);
+    const catLabel = CAT_LABELS[card.category] || '';
+    const badgeCls = 'badge-' + (card.category || 'common');
+    html += `<div class="card-admin-item">
+      <img class="card-admin-thumb" src="${src}" alt="" onerror="this.style.background='#ddd';this.style.display='block'">
+      <div class="card-admin-info">
+        <div class="card-admin-name">${esc(card.name || '（未命名）')}</div>
+        <div class="card-admin-cat">${card.url ? '🔗 URL' : '📁 本機'}</div>
+      </div>
+      <span class="card-type-badge ${badgeCls}">${catLabel}</span>
+      <button class="btn btn-danger btn-small" style="padding:4px 10px;font-size:0.8em;" onclick="removeCard('${card.id}')">✕</button>
+    </div>`;
+  }
+  list.innerHTML = html;
+}
+
+// ---- Add card from local file ----
+function handleCardFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const cat = getSelectedCardCat();
+  const name = document.getElementById('cardNameInput').value.trim() || file.name.replace(/\.[^.]+$/, '');
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    const dataUrl = e.target.result;
+    const id = 'card_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+    const idbKey = id;
+    try {
+      await saveCardToDB(idbKey, dataUrl);
+      appData.cards.push({ id, name, category: cat, idbKey, addedAt: new Date().toISOString() });
+      saveData(appData);
+      document.getElementById('cardNameInput').value = '';
+      event.target.value = '';
+      await renderCardAdmin();
+    } catch(err) { alert('儲存圖鑑失敗：' + err.message); }
+  };
+  reader.readAsDataURL(file);
+}
+
+// ---- Add cards from JSON URL definition file ----
+function handleCardJson(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const cat = getSelectedCardCat();
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!Array.isArray(data)) { alert('JSON 格式錯誤：請確認為陣列格式 [{"name":"…","url":"…"},…]'); return; }
+      let added = 0;
+      for (const item of data) {
+        if (!item.url) continue;
+        const id = 'card_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7) + '_' + added;
+        appData.cards.push({
+          id,
+          name: item.name || '',
+          category: item.category || cat,
+          url: item.url,
+          addedAt: new Date().toISOString()
+        });
+        added++;
+      }
+      if (added === 0) { alert('JSON 內找不到有效的圖片 URL'); return; }
+      saveData(appData);
+      event.target.value = '';
+      await renderCardAdmin();
+      alert(`✅ 成功匯入 ${added} 張圖鑑`);
+    } catch(err) { alert('JSON 解析失敗：' + err.message); }
+  };
+  reader.readAsText(file);
+}
+
+function getSelectedCardCat() {
+  const radios = document.querySelectorAll('input[name="cardCat"]');
+  for (const r of radios) { if (r.checked) return r.value; }
+  return 'common';
+}
+
+async function removeCard(cardId) {
+  const idx = (appData.cards || []).findIndex(c => c.id === cardId);
+  if (idx < 0) return;
+  const card = appData.cards[idx];
+  if (card.idbKey) {
+    try { await deleteCardFromDB(card.idbKey); } catch(e) {}
+  }
+  appData.cards.splice(idx, 1);
+  saveData(appData);
+  await renderCardAdmin();
 }
 
 // ============================================
