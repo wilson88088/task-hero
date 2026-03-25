@@ -477,6 +477,46 @@
   .card-collection-banner .coll-stat { font-size: 0.9em; color: #666; }
   .card-collection-banner .coll-num  { font-weight: 700; color: #764ba2; }
 
+  /* Card gallery edit mode */
+  .card-thumb .card-remove-btn {
+    display: none;
+    position: absolute;
+    top: 4px; right: 4px;
+    width: 24px; height: 24px;
+    background: rgba(235,51,73,0.9);
+    color: #fff;
+    border: none;
+    border-radius: 50%;
+    font-size: 0.85em;
+    font-weight: 700;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    z-index: 10;
+    transition: transform 0.15s;
+  }
+  .card-thumb .card-remove-btn:hover { transform: scale(1.2); }
+  .cards-edit-mode .card-thumb .card-remove-btn { display: flex; }
+  .cards-edit-mode .card-thumb {
+    outline: 2px dashed rgba(235,51,73,0.5);
+    cursor: default;
+  }
+  .cards-edit-mode .card-thumb:not(:has(.card-remove-btn:hover)) {
+    cursor: default;
+  }
+  .card-edit-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+    padding: 8px 12px;
+    background: #fff3f3;
+    border: 1px solid #ffcdd2;
+    border-radius: 10px;
+    font-size: 0.88em;
+    color: #c0392b;
+  }
+
   /* Card lightbox */
   .card-lightbox {
     position: fixed; inset: 0;
@@ -972,7 +1012,14 @@
 <!-- ========== CARDS PAGE ========== -->
 <div id="page-cards" class="page">
   <div class="card">
-    <h2>🃏 我的圖鑑</h2>
+    <div class="flex-between mb-10">
+      <h2>🃏 我的圖鑑</h2>
+      <button id="cardEditToggleBtn" class="btn btn-small" style="padding:5px 14px;font-size:0.85em;background:#f5f5f5;border:1px solid #ddd;border-radius:16px;" onclick="toggleCardEditMode()">✏️ 編輯</button>
+    </div>
+    <div id="cardEditBar" style="display:none;" class="card-edit-bar">
+      ✏️ 編輯模式：點擊 ✕ 移除已收藏的圖鑑
+      <button class="btn btn-success btn-small" style="padding:4px 12px;font-size:0.82em;" onclick="exitCardEditMode()">完成</button>
+    </div>
     <div class="card-collection-banner">
       <div class="coll-stat">已收藏 <span class="coll-num" id="collectedCount">0</span> 張</div>
       <div class="coll-stat">圖鑑池 <span class="coll-num" id="poolCount">0</span> 張</div>
@@ -1547,7 +1594,10 @@ function showPage(name) {
   if (name === 'home') renderHome();
   if (name === 'admin') { renderAdmin(); renderCardAdmin(); }
   if (name === 'reward') renderReward();
-  if (name === 'cards') renderCards();
+  if (name === 'cards') {
+    exitCardEditMode();
+    renderCards();
+  }
 }
 
 function promptPassword() {
@@ -3244,7 +3294,8 @@ async function renderCards() {
     for (const card of catCollected) {
       const src = await resolveCardSrc(card);
       const safeName = esc(card.name || '');
-      html += `<div class="card-thumb ${cat.cls}" onclick="openCardLightbox('${card.id}')">
+      html += `<div class="card-thumb ${cat.cls}" onclick="cardEditMode ? null : openCardLightbox('${card.id}')">
+        <button class="card-remove-btn" onclick="event.stopPropagation();removeCollectedCard('${card.id}')">✕</button>
         <img src="${src || ''}" alt="${safeName}" loading="lazy"
           onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22150%22><rect fill=%22%23eee%22 width=%22100%22 height=%22150%22/><text x=%2250%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%23bbb%22>?</text></svg>'">
         ${safeName ? `<div class="card-label">${safeName}</div>` : ''}
@@ -3263,6 +3314,43 @@ async function resolveCardSrc(card) {
   }
   if (card.url) return card.url;
   return '';
+}
+
+// ---- Gallery edit mode ----
+let cardEditMode = false;
+
+function toggleCardEditMode() {
+  // Prompt password before enabling edit mode
+  const pw = prompt('請輸入密碼以開啟編輯模式：');
+  if (pw !== '1234') {
+    if (pw !== null) alert('密碼錯誤！');
+    return;
+  }
+  cardEditMode = true;
+  document.getElementById('cardEditBar').style.display = 'flex';
+  document.getElementById('cardEditToggleBtn').style.display = 'none';
+  const gallery = document.getElementById('cardGallery');
+  if (gallery) gallery.classList.add('cards-edit-mode');
+}
+
+function exitCardEditMode() {
+  cardEditMode = false;
+  document.getElementById('cardEditBar').style.display = 'none';
+  document.getElementById('cardEditToggleBtn').style.display = '';
+  const gallery = document.getElementById('cardGallery');
+  if (gallery) gallery.classList.remove('cards-edit-mode');
+}
+
+function removeCollectedCard(cardId) {
+  if (!cardEditMode) return;
+  appData.collectedCards = (appData.collectedCards || []).filter(c => c.cardId !== cardId);
+  saveData(appData);
+  renderCards();
+  // Re-apply edit mode class after re-render
+  requestAnimationFrame(() => {
+    const gallery = document.getElementById('cardGallery');
+    if (gallery && cardEditMode) gallery.classList.add('cards-edit-mode');
+  });
 }
 
 // ---- Lightbox ----
