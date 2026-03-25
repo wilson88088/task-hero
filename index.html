@@ -392,6 +392,91 @@
   .card-thumb.diamond{ box-shadow: 0 2px 12px rgba(91,200,251,0.5); border: 2px solid #5bc8fb; }
   .card-empty-cat { color: #bbb; font-size: 0.88em; padding: 6px 0 12px; }
 
+  /* Card draw modal (gacha-style reveal) */
+  .card-draw-overlay {
+    position: fixed; inset: 0;
+    background: rgba(10,5,30,0.92);
+    z-index: 2000;
+    display: flex; align-items: center; justify-content: center;
+    flex-direction: column;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .card-draw-overlay.show { opacity: 1; pointer-events: all; }
+  .card-draw-box {
+    background: linear-gradient(160deg,#1a1040,#2d1b6b);
+    border-radius: 24px;
+    padding: 28px 24px;
+    max-width: 340px; width: 90%;
+    text-align: center;
+    box-shadow: 0 0 60px rgba(118,75,162,0.7);
+    border: 2px solid rgba(255,255,255,0.15);
+    animation: cardReveal 0.5s cubic-bezier(.36,.07,.19,.97) both;
+  }
+  @keyframes cardReveal {
+    0%   { transform: scale(0.6) rotateY(90deg); opacity: 0; }
+    60%  { transform: scale(1.05) rotateY(-5deg); }
+    100% { transform: scale(1) rotateY(0deg); opacity: 1; }
+  }
+  .card-draw-title {
+    font-size: 1em; color: rgba(255,255,255,0.7);
+    margin-bottom: 12px; letter-spacing: 1px;
+  }
+  .card-draw-img {
+    width: 160px; height: 240px;
+    object-fit: cover;
+    border-radius: 14px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+    margin: 0 auto 14px;
+    display: block;
+  }
+  .card-draw-name {
+    font-size: 1.2em; font-weight: 700; color: #fff;
+    margin-bottom: 4px;
+  }
+  .card-draw-cat {
+    font-size: 0.82em; padding: 3px 12px;
+    border-radius: 12px; display: inline-block;
+    margin-bottom: 20px; font-weight: 600;
+  }
+  .card-draw-cat.common  { background:#555; color:#ddd; }
+  .card-draw-cat.silver  { background:linear-gradient(90deg,#aaa,#ccc); color:#333; }
+  .card-draw-cat.gold    { background:linear-gradient(90deg,#f5a623,#ffe066); color:#7a4800; }
+  .card-draw-cat.diamond { background:linear-gradient(90deg,#5bc8fb,#a8edff); color:#005a7a; }
+  .card-draw-actions {
+    display: flex; gap: 12px; justify-content: center;
+  }
+  .card-draw-actions .btn-collect {
+    background: linear-gradient(135deg,#11998e,#38ef7d);
+    color: #fff; border: none; padding: 12px 28px;
+    border-radius: 20px; font-size: 1em; font-weight: 700;
+    cursor: pointer; transition: transform 0.15s;
+  }
+  .card-draw-actions .btn-collect:hover { transform: scale(1.05); }
+  .card-draw-actions .btn-skip {
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7); border: 1px solid rgba(255,255,255,0.2);
+    padding: 12px 28px; border-radius: 20px;
+    font-size: 1em; cursor: pointer; transition: transform 0.15s;
+  }
+  .card-draw-actions .btn-skip:hover { transform: scale(1.05); }
+  .card-draw-already {
+    font-size: 0.8em; color: rgba(255,255,255,0.4);
+    margin-top: 10px;
+  }
+
+  /* Home 圖鑑: collected count banner */
+  .card-collection-banner {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 16px;
+    padding: 10px 16px;
+    background: linear-gradient(135deg,#667eea22,#764ba222);
+    border-radius: 12px;
+    border: 1px solid #764ba233;
+  }
+  .card-collection-banner .coll-stat { font-size: 0.9em; color: #666; }
+  .card-collection-banner .coll-num  { font-weight: 700; color: #764ba2; }
+
   /* Card lightbox */
   .card-lightbox {
     position: fixed; inset: 0;
@@ -887,8 +972,27 @@
 <!-- ========== CARDS PAGE ========== -->
 <div id="page-cards" class="page">
   <div class="card">
-    <h2>🃏 圖鑑</h2>
+    <h2>🃏 我的圖鑑</h2>
+    <div class="card-collection-banner">
+      <div class="coll-stat">已收藏 <span class="coll-num" id="collectedCount">0</span> 張</div>
+      <div class="coll-stat">圖鑑池 <span class="coll-num" id="poolCount">0</span> 張</div>
+    </div>
     <div id="cardGallery"></div>
+  </div>
+</div>
+
+<!-- Card draw overlay (gacha reveal) -->
+<div class="card-draw-overlay" id="cardDrawOverlay">
+  <div class="card-draw-box">
+    <div class="card-draw-title">✨ 恭喜！獲得一張圖鑑！</div>
+    <img class="card-draw-img" id="cardDrawImg" src="" alt="">
+    <div class="card-draw-name" id="cardDrawName"></div>
+    <div class="card-draw-cat" id="cardDrawCat"></div>
+    <div class="card-draw-already" id="cardDrawAlready"></div>
+    <div class="card-draw-actions">
+      <button class="btn-collect" onclick="collectDrawnCard()">⭐ 收藏</button>
+      <button class="btn-skip"    onclick="skipDrawnCard()">放棄</button>
+    </div>
   </div>
 </div>
 
@@ -1283,7 +1387,7 @@ const IDB_VERSION = 2;
 function loadData() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) return JSON.parse(raw);
-  return { tasks: [], records: [], score: 0, rewards: [], specials: [], cards: [] };
+  return { tasks: [], records: [], score: 0, rewards: [], specials: [], cards: [], collectedCards: [] };
 }
 
 function saveData(data) {
@@ -1301,6 +1405,7 @@ function saveData(data) {
 
 let appData = loadData();
 if (!appData.cards) appData.cards = [];
+if (!appData.collectedCards) appData.collectedCards = [];
 
 // --- IndexedDB helper for large media files ---
 function openMediaDB() {
@@ -1569,6 +1674,9 @@ function renderAdmin() {
               <button class="btn btn-danger btn-small" onclick="cancelSubTaskEdit()">✕</button>
             </div>`;
         }
+        const hasCardPool = appData.cards && appData.cards.length > 0;
+        const showCardChecked = !!st.showCard ? 'checked' : '';
+        const cardToggleTitle = hasCardPool ? '' : 'title="請先在圖鑑管理新增圖鑑"';
         return `
           <div class="subtask-item" draggable="true"
                ondragstart="onDragStart(event,${i},${j})"
@@ -1583,7 +1691,13 @@ function renderAdmin() {
               <span class="sub-name">${esc(st.name)}</span>
               <span class="sub-time">（${formatTimeLabel(st.time)}）</span>
             </div>
-            <div class="sub-actions">
+            <div class="sub-actions" style="gap:6px;">
+              <label ${cardToggleTitle} style="display:flex;align-items:center;gap:3px;font-size:0.78em;color:#764ba2;font-weight:600;cursor:pointer;white-space:nowrap;">
+                <input type="checkbox" ${showCardChecked} ${hasCardPool?'':'disabled'}
+                  onchange="toggleSubtaskShowCard(${i},${j},this.checked)"
+                  style="width:14px;height:14px;accent-color:#764ba2;">
+                🃏
+              </label>
               <button class="btn btn-primary btn-small" onclick="startEditSubTask(${i},${j})" title="編輯">✎</button>
               <button class="btn btn-danger btn-small" onclick="removeSubTask(${i},${j})" title="刪除">✕</button>
             </div>
@@ -2027,18 +2141,30 @@ function completeSubtask() {
   result.endTime = endTime.toISOString();
   result.actual = execState.elapsed;
 
-  execState.subIndex++;
   const task = appData.tasks[execState.taskIndex];
+  const completedSub = task.subtasks[execState.subIndex];
+
+  execState.subIndex++;
 
   // Update sidebar to reflect completion
   renderExecSidebar();
 
-  if (execState.subIndex < task.subtasks.length) {
-    // Next subtask
-    runSubtask();
+  // Show card draw if subtask has showCard enabled and card pool exists
+  if (completedSub.showCard && appData.cards && appData.cards.length > 0) {
+    showCardDraw(() => {
+      // After card draw resolved (collect or skip), continue
+      if (execState.subIndex < task.subtasks.length) {
+        runSubtask();
+      } else {
+        showResult();
+      }
+    });
   } else {
-    // All done
-    showResult();
+    if (execState.subIndex < task.subtasks.length) {
+      runSubtask();
+    } else {
+      showResult();
+    }
   }
 }
 
@@ -3083,34 +3209,48 @@ const CARD_CATEGORIES = [
 ];
 const CAT_LABELS = { common:'普卡', silver:'銀卡', gold:'金卡', diamond:'鑽石卡' };
 
-// ---- Render gallery page ----
+// ---- Render gallery page (shows only COLLECTED cards) ----
 async function renderCards() {
   const container = document.getElementById('cardGallery');
   if (!container) return;
-  if (!appData.cards || appData.cards.length === 0) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🃏</div><p>還沒有圖鑑喔！<br>請到「管理」頁面新增</p></div>`;
+
+  const collected = appData.collectedCards || [];
+  const pool = appData.cards || [];
+
+  // Update count banner
+  const cc = document.getElementById('collectedCount');
+  const pc = document.getElementById('poolCount');
+  if (cc) cc.textContent = collected.length;
+  if (pc) pc.textContent = pool.length;
+
+  if (collected.length === 0) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🃏</div><p>還沒有收藏任何圖鑑！<br>完成任務時努力抽卡吧！</p></div>`;
     return;
   }
+
+  // Build a lookup map from pool
+  const poolMap = Object.fromEntries(pool.map(c => [c.id, c]));
+
   let html = '';
   for (const cat of CARD_CATEGORIES) {
-    const cards = appData.cards.filter(c => c.category === cat.key);
+    const catCollected = collected
+      .map(cc2 => poolMap[cc2.cardId])
+      .filter(c => c && c.category === cat.key);
+    if (catCollected.length === 0) continue;
+
     html += `<div class="card-category-section">
-      <div class="card-category-title ${cat.cls}">${cat.label}（${cards.length} 張）</div>`;
-    if (cards.length === 0) {
-      html += `<div class="card-empty-cat">尚無 ${cat.label}</div>`;
-    } else {
-      html += `<div class="card-grid">`;
-      for (const card of cards) {
-        const src = await resolveCardSrc(card);
-        const safeName = esc(card.name || '');
-        html += `<div class="card-thumb ${cat.cls}" onclick="openCardLightbox('${card.id}')">
-          <img src="${src || ''}" alt="${safeName}" loading="lazy" onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22150%22><rect fill=%22%23eee%22 width=%22100%22 height=%22150%22/><text x=%2250%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%23bbb%22>?</text></svg>'">
-          ${safeName ? `<div class="card-label">${safeName}</div>` : ''}
-        </div>`;
-      }
-      html += `</div>`;
+      <div class="card-category-title ${cat.cls}">${cat.label}（${catCollected.length} 張）</div>
+      <div class="card-grid">`;
+    for (const card of catCollected) {
+      const src = await resolveCardSrc(card);
+      const safeName = esc(card.name || '');
+      html += `<div class="card-thumb ${cat.cls}" onclick="openCardLightbox('${card.id}')">
+        <img src="${src || ''}" alt="${safeName}" loading="lazy"
+          onerror="this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22150%22><rect fill=%22%23eee%22 width=%22100%22 height=%22150%22/><text x=%2250%22 y=%2280%22 text-anchor=%22middle%22 fill=%22%23bbb%22>?</text></svg>'">
+        ${safeName ? `<div class="card-label">${safeName}</div>` : ''}
+      </div>`;
     }
-    html += `</div>`;
+    html += `</div></div>`;
   }
   container.innerHTML = html;
 }
@@ -3248,6 +3388,69 @@ async function removeCard(cardId) {
 }
 
 // ============================================
+// ============================================
+// CARD DRAW (抽卡 / 收藏)
+// ============================================
+let cardDrawCallback = null;
+let drawnCardId = null;
+
+// Toggle showCard flag on a subtask
+function toggleSubtaskShowCard(taskIdx, subIdx, checked) {
+  appData.tasks[taskIdx].subtasks[subIdx].showCard = checked;
+  saveData(appData);
+}
+
+// Show gacha card draw modal; callback() called after user resolves
+async function showCardDraw(callback) {
+  cardDrawCallback = callback;
+  const pool = appData.cards || [];
+  if (pool.length === 0) { callback(); return; }
+
+  // Pick a random card
+  const card = pool[Math.floor(Math.random() * pool.length)];
+  drawnCardId = card.id;
+
+  // Resolve image
+  const src = await resolveCardSrc(card);
+  document.getElementById('cardDrawImg').src = src || '';
+  document.getElementById('cardDrawName').textContent = card.name || '（未命名）';
+
+  const catInfo = CARD_CATEGORIES.find(c => c.key === card.category) || { cls: 'common', label: '普卡' };
+  const catEl = document.getElementById('cardDrawCat');
+  catEl.textContent = catInfo.label;
+  catEl.className = 'card-draw-cat ' + catInfo.cls;
+
+  // Check if already collected
+  const alreadyOwned = (appData.collectedCards || []).some(c => c.cardId === card.id);
+  document.getElementById('cardDrawAlready').textContent = alreadyOwned ? '（已收藏過）' : '';
+
+  document.getElementById('cardDrawOverlay').classList.add('show');
+}
+
+function collectDrawnCard() {
+  if (!drawnCardId) { closeCardDraw(); return; }
+  const alreadyOwned = (appData.collectedCards || []).some(c => c.cardId === drawnCardId);
+  if (!alreadyOwned) {
+    if (!appData.collectedCards) appData.collectedCards = [];
+    appData.collectedCards.push({ cardId: drawnCardId, collectedAt: new Date().toISOString() });
+    saveData(appData);
+  }
+  closeCardDraw();
+}
+
+function skipDrawnCard() {
+  closeCardDraw();
+}
+
+function closeCardDraw() {
+  document.getElementById('cardDrawOverlay').classList.remove('show');
+  document.getElementById('cardDrawImg').src = '';
+  drawnCardId = null;
+  const cb = cardDrawCallback;
+  cardDrawCallback = null;
+  if (cb) cb();
+}
+
 // HELPERS
 // ============================================
 function esc(str) {
