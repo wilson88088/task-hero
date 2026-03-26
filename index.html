@@ -2031,13 +2031,21 @@ function renderRewardSettings() {
             <span class="fate-num">${j+1}.</span>
             <span class="fate-name">${esc(it)}</span>
           </div>`).join('');
+        const retryChecked = r.hasRetry ? 'checked' : '';
         return `
           <div class="reward-setting" style="flex-wrap:wrap;">
             <span class="rw-pts">${r.points} 點</span>
-            <span style="flex:1">= 🎰 命運與機會 <span class="fate-badge">${r.fateItems.length} 個獎品</span></span>
+            <span style="flex:1">= 🎰 命運與機會 <span class="fate-badge">${r.fateItems.length} 個獎品</span>${r.hasRetry ? ' <span style="font-size:0.78em;color:#764ba2;">＋🔄再來一次</span>' : ''}</span>
             <button class="btn btn-primary btn-small" onclick="toggleFatePreview(${i})" style="padding:4px 10px;font-size:0.8em;">展開</button>
             <button class="btn btn-danger btn-small" onclick="removeReward(${i})">✕</button>
-            <div id="fatePreview${i}" style="display:none;width:100%;margin-top:8px;">${itemsPreview}</div>
+            <div id="fatePreview${i}" style="display:none;width:100%;margin-top:8px;">
+              ${itemsPreview}
+              <label style="display:flex;align-items:center;gap:6px;margin-top:8px;cursor:pointer;font-size:0.88em;font-weight:500;color:#764ba2;">
+                <input type="checkbox" ${retryChecked} onchange="toggleRetryOption(${i}, this.checked)"
+                  style="width:15px;height:15px;accent-color:#764ba2;">
+                加入「🔄 再來一次」格
+              </label>
+            </div>
           </div>`;
       }
       return `
@@ -2053,6 +2061,12 @@ function renderRewardSettings() {
 function toggleFatePreview(i) {
   const el = document.getElementById('fatePreview' + i);
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleRetryOption(rewardIdx, checked) {
+  appData.rewards[rewardIdx].hasRetry = checked;
+  saveData(appData);
+  renderRewardSettings();
 }
 
 function addRewardSetting() {
@@ -2665,6 +2679,14 @@ const WHEEL_COLORS = [
 let wheelSpinning = false;
 let wheelAngle = 0;
 let wheelRewardIndex = -1;
+const RETRY_ITEM = '🔄 再來一次';
+
+// Build the actual items array shown on the wheel (may include retry slot)
+function getWheelItems(reward) {
+  const items = [...reward.fateItems];
+  if (reward.hasRetry) items.push(RETRY_ITEM);
+  return items;
+}
 
 function openWheelModal(rewardIdx) {
   wheelRewardIndex = rewardIdx;
@@ -2677,7 +2699,7 @@ function openWheelModal(rewardIdx) {
   document.getElementById('wheelCancelBtn').style.display = 'inline-block';
   document.getElementById('wheelSpinBtn').style.pointerEvents = 'auto';
   openModal('wheelModal');
-  drawWheel(r.fateItems, 0);
+  drawWheel(getWheelItems(r), 0);
 }
 
 function drawWheel(items, rotation) {
@@ -2710,12 +2732,23 @@ function drawWheel(items, rotation) {
     ctx.rotate(startAngle + arc / 2);
     ctx.textAlign = 'right';
     ctx.fillStyle = '#fff';
-    ctx.font = 'bold 14px "Microsoft JhengHei", sans-serif';
     ctx.shadowColor = 'rgba(0,0,0,0.3)';
     ctx.shadowBlur = 2;
-    // Truncate long text
+    // Dynamic font sizing: shrink until text fits radially, then truncate only if needed
+    const maxTextWidth = radius - 20; // ~130px available radially before hitting centre button
     let text = items[i];
-    if (text.length > 6) text = text.substring(0, 5) + '…';
+    let fontSize = 14;
+    ctx.font = `bold ${fontSize}px "Microsoft JhengHei", sans-serif`;
+    while (ctx.measureText(text).width > maxTextWidth && fontSize > 11) {
+      fontSize--;
+      ctx.font = `bold ${fontSize}px "Microsoft JhengHei", sans-serif`;
+    }
+    if (ctx.measureText(text).width > maxTextWidth) {
+      while (text.length > 1 && ctx.measureText(text + '…').width > maxTextWidth) {
+        text = text.slice(0, -1);
+      }
+      if (text !== items[i]) text += '…';
+    }
     ctx.fillText(text, radius - 14, 5);
     ctx.restore();
   }
@@ -2731,29 +2764,26 @@ function spinWheel() {
   document.getElementById('wheelCancelBtn').style.display = 'none';
   document.getElementById('wheelResult').textContent = '轉盤轉動中...';
 
-  const items = r.fateItems;
+  const items = getWheelItems(r);
   const n = items.length;
   const arc = (2 * Math.PI) / n;
 
   // Pick random winner
   const winnerIdx = Math.floor(Math.random() * n);
-  // Calculate target angle: the winner slice should be at the top (pointer position)
-  // Pointer is at top (angle = -PI/2 = 270deg), slice i center is at i*arc + arc/2
-  // We need: rotation + winnerIdx*arc + arc/2 = -PI/2 + 2*PI*k (mod 2PI pointing up)
-  // rotation = -PI/2 - winnerIdx*arc - arc/2
-  const targetBase = -Math.PI / 2 - winnerIdx * arc - arc / 2;
-  // Add multiple full spins (5-8 spins)
-  const extraSpins = (5 + Math.random() * 3) * 2 * Math.PI;
+  const targetBase = -winnerIdx * arc - arc / 2;
+  const numFullSpins = 5 + Math.floor(Math.random() * 4); // must be integer (5–8) so winner lands exactly under pointer
+  const extraSpins = numFullSpins * 2 * Math.PI;
   const targetAngle = targetBase - extraSpins;
 
   const duration = 4000;
   const startTime = performance.now();
+  // Normalize accumulated angle so retry spins travel the same distance as the first spin
+  wheelAngle = wheelAngle % (2 * Math.PI);
   const startAngle = wheelAngle;
 
   function animate(now) {
     const elapsed = now - startTime;
     const t = Math.min(elapsed / duration, 1);
-    // Ease out cubic
     const ease = 1 - Math.pow(1 - t, 3);
     const currentAngle = startAngle + (targetAngle - startAngle) * ease;
     wheelAngle = currentAngle;
@@ -2762,18 +2792,27 @@ function spinWheel() {
     if (t < 1) {
       requestAnimationFrame(animate);
     } else {
-      // Done spinning
       wheelSpinning = false;
       wheelAngle = currentAngle;
       const winner = items[winnerIdx];
-      document.getElementById('wheelResult').innerHTML =
-        `🎊 恭喜獲得：<strong>${esc(winner)}</strong>`;
-      document.getElementById('wheelCloseBtn').style.display = 'inline-block';
+      const isRetry = winner === RETRY_ITEM;
 
-      // Deduct points
-      appData.score -= r.points;
-      saveData(appData);
-      speak(`恭喜你轉到了 ${winner}！`);
+      if (isRetry) {
+        // Retry: show message, re-enable spin button (no points deducted yet)
+        document.getElementById('wheelResult').innerHTML =
+          `🔄 <strong>再來一次！</strong> 再轉一次看看吧！`;
+        document.getElementById('wheelSpinBtn').style.pointerEvents = 'auto';
+        document.getElementById('wheelCancelBtn').style.display = 'inline-block';
+        speak('再來一次！再轉一次看看吧！');
+      } else {
+        // Real win: show result, deduct points
+        document.getElementById('wheelResult').innerHTML =
+          `🎊 恭喜獲得：<strong>${esc(winner)}</strong>`;
+        document.getElementById('wheelCloseBtn').style.display = 'inline-block';
+        appData.score -= r.points;
+        saveData(appData);
+        speak(`恭喜你轉到了 ${winner}！`);
+      }
     }
   }
 
