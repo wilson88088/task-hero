@@ -1133,6 +1133,14 @@
       <h2>🃏 圖鑑管理</h2>
       <span style="font-size:0.85em;color:#888;" id="cardAdminCount"></span>
     </div>
+    <!-- Gallery button name setting -->
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:10px 14px;background:#f8f9ff;border-radius:10px;">
+      <label style="margin:0;font-size:0.9em;color:#555;white-space:nowrap;">🏷️ 按鈕名稱</label>
+      <input type="text" id="cardGalleryNameInput" placeholder="圖鑑"
+        style="flex:1;margin:0;padding:6px 10px;font-size:0.9em;"
+        oninput="updateCardGalleryName(this.value)">
+      <span style="font-size:0.8em;color:#aaa;white-space:nowrap;">（預設：圖鑑）</span>
+    </div>
 
     <!-- Add card controls -->
     <div style="background:#f8f9ff;border-radius:12px;padding:16px;margin-bottom:16px;">
@@ -1437,7 +1445,7 @@ const IDB_VERSION = 2;
 function loadData() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw) return JSON.parse(raw);
-  return { tasks: [], records: [], score: 0, rewards: [], specials: [], cards: [], collectedCards: [] };
+  return { tasks: [], records: [], score: 0, rewards: [], specials: [], cards: [], collectedCards: [], cardGalleryName: '圖鑑' };
 }
 
 function saveData(data) {
@@ -1456,6 +1464,7 @@ function saveData(data) {
 let appData = loadData();
 if (!appData.cards) appData.cards = [];
 if (!appData.collectedCards) appData.collectedCards = [];
+if (!appData.cardGalleryName) appData.cardGalleryName = '圖鑑';
 
 // --- IndexedDB helper for large media files ---
 function openMediaDB() {
@@ -3379,6 +3388,9 @@ async function renderCardAdmin() {
   const list = document.getElementById('cardAdminList');
   const count = document.getElementById('cardAdminCount');
   if (!list) return;
+  // Populate name input
+  const nameInput = document.getElementById('cardGalleryNameInput');
+  if (nameInput) nameInput.value = appData.cardGalleryName || '圖鑑';
   const cards = appData.cards || [];
   if (count) count.textContent = `共 ${cards.length} 張`;
   if (cards.length === 0) {
@@ -3458,6 +3470,18 @@ function handleCardJson(event) {
     } catch(err) { alert('JSON 解析失敗：' + err.message); }
   };
   reader.readAsText(file);
+}
+
+function updateCardGalleryName(val) {
+  const name = val.trim() || '圖鑑';
+  appData.cardGalleryName = name;
+  saveData(appData);
+  // Update navbar button
+  const btn = document.getElementById('navCards');
+  if (btn) btn.textContent = '🃏 ' + name;
+  // Update cards page title
+  const pageTitle = document.querySelector('#page-cards h2');
+  if (pageTitle) pageTitle.textContent = '🃏 我的' + name;
 }
 
 function getSelectedCardCat() {
@@ -3558,6 +3582,10 @@ if ('speechSynthesis' in window) {
 
 // Initial render
 renderHome();
+// Apply saved gallery button name
+if (appData.cardGalleryName && appData.cardGalleryName !== '圖鑑') {
+  updateCardGalleryName(appData.cardGalleryName);
+}
 </script>
 </body>
 </html>
