@@ -1189,7 +1189,8 @@
         <label>新增獎勵</label>
         <div class="reward-type-toggle">
           <button id="rewardTypeText" class="active" onclick="setRewardType('text')">📝 自訂文字</button>
-          <button id="rewardTypeFate" onclick="setRewardType('fate')">🎰 命運與機會</button>
+          <button id="rewardTypeFate" onclick="setRewardType('fate')">🎰 命運轉盤</button>
+          <button id="rewardTypeCard" onclick="setRewardType('card')">🃏 兌換圖鑑</button>
         </div>
       </div>
       <div class="mt-10" style="display:flex;gap:8px;align-items:start;">
@@ -2062,12 +2063,17 @@ function setRewardType(type) {
   currentRewardType = type;
   document.getElementById('rewardTypeText').classList.toggle('active', type === 'text');
   document.getElementById('rewardTypeFate').classList.toggle('active', type === 'fate');
+  document.getElementById('rewardTypeCard').classList.toggle('active', type === 'card');
   document.getElementById('fateInputArea').style.display = type === 'fate' ? 'block' : 'none';
   const nameInput = document.getElementById('rewardName');
   if (type === 'fate') {
     nameInput.value = '命運與機會';
     nameInput.readOnly = true;
     nameInput.style.background = '#f0ecf5';
+  } else if (type === 'card') {
+    nameInput.value = '兌換圖鑑';
+    nameInput.readOnly = false;   // allow custom label, e.g. "抽一張圖鑑"
+    nameInput.style.background = '';
   } else {
     nameInput.value = '';
     nameInput.readOnly = false;
@@ -2177,6 +2183,14 @@ function renderRewardSettings() {
             </div>
           </div>`;
       }
+      if (r.type === 'card') {
+        return `
+          <div class="reward-setting">
+            <span class="rw-pts">${r.points} 點</span>
+            <span style="flex:1">= 🃏 ${esc(r.name)}</span>
+            <button class="btn btn-danger btn-small" onclick="removeReward(${i})">✕</button>
+          </div>`;
+      }
       return `
         <div class="reward-setting">
           <span class="rw-pts">${r.points} 點</span>
@@ -2215,6 +2229,9 @@ function addRewardSetting() {
     });
     tempFateItems = [];
     renderFateItemsList();
+  } else if (currentRewardType === 'card') {
+    const name = document.getElementById('rewardName').value.trim() || '兌換圖鑑';
+    appData.rewards.push({ type: 'card', points: pts, name });
   } else {
     const name = document.getElementById('rewardName').value.trim();
     if (!name) return;
@@ -2223,7 +2240,9 @@ function addRewardSetting() {
 
   saveData(appData);
   document.getElementById('rewardPts').value = '';
-  document.getElementById('rewardName').value = currentRewardType === 'fate' ? '命運與機會' : '';
+  const defaultName = currentRewardType === 'fate' ? '命運與機會'
+                    : currentRewardType === 'card' ? '兌換圖鑑' : '';
+  document.getElementById('rewardName').value = defaultName;
   renderAdmin();
 }
 
@@ -2482,7 +2501,15 @@ function renderReward() {
     exContainer.innerHTML = appData.rewards.map((r, i) => {
       const canRedeem = appData.score >= r.points;
       const isFate = r.type === 'fate';
-      const label = isFate ? `🎰 命運與機會 <span class="fate-badge">${r.fateItems.length} 個獎品</span>` : esc(r.name);
+      const isCard = r.type === 'card';
+      const label = isFate
+        ? `🎰 命運與機會 <span class="fate-badge">${r.fateItems.length} 個獎品</span>`
+        : isCard
+          ? `🃏 ${esc(r.name)}`
+          : esc(r.name);
+      const btnLabel = canRedeem
+        ? (isFate ? '🎰 轉盤' : isCard ? '🃏 抽卡' : '🎁 兌換')
+        : '點數不足';
       return `
         <div class="reward-setting">
           <span class="rw-pts" style="display:flex;align-items:center;gap:4px;">
@@ -2494,7 +2521,7 @@ function renderReward() {
           <button class="btn ${canRedeem ? 'btn-warning' : ''} btn-small"
             ${canRedeem ? `onclick="tryRedeem(${i})"` : 'disabled'}
             style="${canRedeem ? '' : 'opacity:0.4;cursor:not-allowed;background:#ccc;color:#888;'}">
-            ${canRedeem ? (isFate ? '🎰 轉盤' : '🎁 兌換') : '點數不足'}
+            ${btnLabel}
           </button>
         </div>`;
     }).join('');
@@ -2868,6 +2895,13 @@ function tryRedeem(i) {
   if (r.type === 'fate') {
     // Open wheel modal
     openWheelModal(i);
+  } else if (r.type === 'card') {
+    // Deduct points then show card draw
+    if (appData.score < r.points) return;
+    appData.score -= r.points;
+    saveData(appData);
+    speak(`消耗 ${r.points} 點，來抽一張圖鑑！`);
+    showCardDraw(() => { renderReward(); });
   } else {
     document.getElementById('redeemMessage').textContent =
       `要用 ${r.points} 點兌換「${r.name}」嗎？`;
