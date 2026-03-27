@@ -1286,9 +1286,13 @@
 
 <!-- ========== REWARD PAGE ========== -->
 <div id="page-reward" class="page">
-  <div class="score-display bounce-in">
+  <div class="score-display bounce-in" style="position:relative;">
     <div class="score-label">⭐ 目前累積點數</div>
-    <div class="score-num" id="totalScore">0</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;">
+      <div class="score-num" id="totalScore">0</div>
+      <button onclick="promptEditScore()" title="修改點數"
+        style="border:none;background:rgba(255,255,255,0.25);color:#fff;border-radius:50%;width:32px;height:32px;font-size:1em;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">✏️</button>
+    </div>
   </div>
 
   <!-- Rewards Available -->
@@ -2605,7 +2609,16 @@ function enterDeleteMode() {
 let pendingDeleteAction = '';
 let pendingEditRewardIdx = -1;   // reward index waiting for points edit
 
-// ─── Reward points editing (requires password) ──────────────────────────────
+// ─── Score / Reward points editing (requires password) ───────────────────────
+function promptEditScore() {
+  pendingDeleteAction = 'editScore';
+  document.getElementById('deletePwInput').value = '';
+  document.getElementById('deletePwError').style.display = 'none';
+  document.getElementById('deletePwMessage').textContent = '修改累積點數需要管理密碼';
+  openModal('deletePwModal');
+  setTimeout(() => document.getElementById('deletePwInput').focus(), 100);
+}
+
 function promptEditRewardPts(i) {
   pendingEditRewardIdx = i;
   pendingDeleteAction = 'editRewardPts';
@@ -2619,9 +2632,13 @@ function promptEditRewardPts(i) {
 function confirmEditPts() {
   const val = parseInt(document.getElementById('editPtsInput').value);
   const errEl = document.getElementById('editPtsError');
-  if (!val || val < 1) { errEl.style.display = 'block'; return; }
+  if (isNaN(val) || val < 0) { errEl.style.display = 'block'; return; }
   errEl.style.display = 'none';
-  appData.rewards[pendingEditRewardIdx].points = val;
+  if (pendingDeleteAction === 'editScore') {
+    appData.score = val;
+  } else {
+    appData.rewards[pendingEditRewardIdx].points = val;
+  }
   saveData(appData);
   closeModal('editPtsModal');
   renderReward();
@@ -2684,7 +2701,15 @@ function checkDeletePw() {
   const pw = document.getElementById('deletePwInput').value;
   if (pw === '1234') {
     closeModal('deletePwModal');
-    if (pendingDeleteAction === 'editRewardPts') {
+    if (pendingDeleteAction === 'editScore') {
+      // edit total accumulated score
+      document.getElementById('editPtsMessage').textContent =
+        `目前累積點數：${appData.score} 點　｜　請輸入新的點數`;
+      document.getElementById('editPtsInput').value = appData.score;
+      document.getElementById('editPtsError').style.display = 'none';
+      openModal('editPtsModal');
+      setTimeout(() => document.getElementById('editPtsInput').focus(), 100);
+    } else if (pendingDeleteAction === 'editRewardPts') {
       // show the edit points modal
       const r = appData.rewards[pendingEditRewardIdx];
       document.getElementById('editPtsMessage').textContent =
