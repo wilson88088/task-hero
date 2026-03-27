@@ -1418,6 +1418,21 @@
   </div>
 </div>
 
+<!-- ========== EDIT POINTS MODAL ========== -->
+<div class="modal-overlay" id="editPtsModal">
+  <div class="modal" style="max-width:320px;">
+    <h2>✏️ 修改點數</h2>
+    <p style="color:#888;margin-bottom:10px;" id="editPtsMessage">請輸入新的所需點數</p>
+    <input type="number" id="editPtsInput" placeholder="例如：5" min="1"
+      onkeydown="if(event.key==='Enter')confirmEditPts()">
+    <div style="display:flex;gap:10px;justify-content:center;">
+      <button class="btn btn-success" onclick="confirmEditPts()">💾 儲存</button>
+      <button class="btn btn-danger" onclick="closeModal('editPtsModal')">取消</button>
+    </div>
+    <p id="editPtsError" style="color:#eb3349;margin-top:10px;display:none;">請輸入有效的點數（≥1）！</p>
+  </div>
+</div>
+
 <!-- ========== DELETE RECORDS PASSWORD MODAL ========== -->
 <div class="modal-overlay" id="deletePwModal">
   <div class="modal">
@@ -2026,6 +2041,47 @@ function renderRewardSettings() {
   } else {
     container.innerHTML = appData.rewards.map((r, i) => {
       if (r.type === 'fate') {
+        const isEditing = fateEditingIdx === i;
+
+        if (isEditing) {
+          // ── Inline edit mode ───────────────────────────────────────
+          const editItemsHtml = fateEditItems.map((it, j) => `
+            <div class="fate-item" style="background:#f8f4ff;border-radius:6px;padding:4px 8px;margin-bottom:4px;">
+              <span class="fate-num">${j+1}.</span>
+              <span class="fate-name" style="flex:1;">${esc(it)}</span>
+              <button onclick="removeFateEditItem(${j})"
+                style="border:none;background:#eb3349;color:#fff;border-radius:4px;padding:2px 7px;cursor:pointer;font-size:0.82em;">✕</button>
+            </div>`).join('');
+          const retryChecked = r.hasRetry ? 'checked' : '';
+          return `
+            <div class="reward-setting" id="fateEditArea${i}" style="flex-wrap:wrap;border:2px solid #764ba2;border-radius:12px;padding:12px;">
+              <div style="width:100%;font-weight:bold;color:#764ba2;margin-bottom:10px;font-size:1em;">✏️ 修改命運與機會</div>
+              <div style="display:flex;align-items:center;gap:8px;width:100%;margin-bottom:10px;">
+                <label style="font-size:0.88em;color:#555;white-space:nowrap;">所需點數：</label>
+                <input id="fateEditPts" type="number" value="${r.points}" min="1"
+                  style="width:70px;padding:5px 8px;border:1.5px solid #764ba2;border-radius:6px;font-size:0.95em;">
+              </div>
+              <div style="width:100%;margin-bottom:6px;font-size:0.85em;color:#888;">獎品清單（至少 2 項）</div>
+              <div style="width:100%;">${editItemsHtml}</div>
+              <div style="display:flex;gap:8px;width:100%;margin-top:8px;">
+                <input id="fateEditItemInput" type="text" placeholder="輸入獎品名稱後按新增"
+                  onkeydown="if(event.key==='Enter')addFateEditItem()"
+                  style="flex:1;padding:5px 8px;border:1.5px solid #ccc;border-radius:6px;font-size:0.9em;">
+                <button class="btn btn-primary btn-small" onclick="addFateEditItem()" style="white-space:nowrap;">＋ 新增</button>
+              </div>
+              <label style="display:flex;align-items:center;gap:6px;margin-top:10px;cursor:pointer;font-size:0.88em;font-weight:500;color:#764ba2;width:100%;">
+                <input type="checkbox" ${retryChecked} onchange="toggleRetryOption(${i}, this.checked)"
+                  style="width:15px;height:15px;accent-color:#764ba2;">
+                加入「🔄 再來一次」格
+              </label>
+              <div style="display:flex;gap:8px;margin-top:12px;width:100%;">
+                <button class="btn btn-success btn-small" onclick="saveEditFate(${i})" style="flex:1;">💾 儲存</button>
+                <button class="btn btn-danger btn-small" onclick="cancelEditFate()" style="flex:1;">取消</button>
+              </div>
+            </div>`;
+        }
+
+        // ── Normal display mode ────────────────────────────────────
         const itemsPreview = r.fateItems.map((it, j) => `
           <div class="fate-item">
             <span class="fate-num">${j+1}.</span>
@@ -2036,6 +2092,7 @@ function renderRewardSettings() {
           <div class="reward-setting" style="flex-wrap:wrap;">
             <span class="rw-pts">${r.points} 點</span>
             <span style="flex:1">= 🎰 命運與機會 <span class="fate-badge">${r.fateItems.length} 個獎品</span>${r.hasRetry ? ' <span style="font-size:0.78em;color:#764ba2;">＋🔄再來一次</span>' : ''}</span>
+            <button class="btn btn-primary btn-small" onclick="startEditFate(${i})" style="padding:4px 10px;font-size:0.8em;">✏️ 修改</button>
             <button class="btn btn-primary btn-small" onclick="toggleFatePreview(${i})" style="padding:4px 10px;font-size:0.8em;">展開</button>
             <button class="btn btn-danger btn-small" onclick="removeReward(${i})">✕</button>
             <div id="fatePreview${i}" style="display:none;width:100%;margin-top:8px;">
@@ -2356,7 +2413,11 @@ function renderReward() {
       const label = isFate ? `🎰 命運與機會 <span class="fate-badge">${r.fateItems.length} 個獎品</span>` : esc(r.name);
       return `
         <div class="reward-setting">
-          <span class="rw-pts">${r.points} 點</span>
+          <span class="rw-pts" style="display:flex;align-items:center;gap:4px;">
+            ${r.points} 點
+            <button onclick="promptEditRewardPts(${i})" title="修改點數"
+              style="border:none;background:none;cursor:pointer;font-size:0.82em;color:#764ba2;padding:0 2px;line-height:1;">✏️</button>
+          </span>
           <span style="flex:1">= ${label}</span>
           <button class="btn ${canRedeem ? 'btn-warning' : ''} btn-small"
             ${canRedeem ? `onclick="tryRedeem(${i})"` : 'disabled'}
@@ -2443,12 +2504,97 @@ function enterDeleteMode() {
 }
 
 let pendingDeleteAction = '';
+let pendingEditRewardIdx = -1;   // reward index waiting for points edit
+
+// ─── Reward points editing (requires password) ──────────────────────────────
+function promptEditRewardPts(i) {
+  pendingEditRewardIdx = i;
+  pendingDeleteAction = 'editRewardPts';
+  document.getElementById('deletePwInput').value = '';
+  document.getElementById('deletePwError').style.display = 'none';
+  document.getElementById('deletePwMessage').textContent = '修改點數需要管理密碼';
+  openModal('deletePwModal');
+  setTimeout(() => document.getElementById('deletePwInput').focus(), 100);
+}
+
+function confirmEditPts() {
+  const val = parseInt(document.getElementById('editPtsInput').value);
+  const errEl = document.getElementById('editPtsError');
+  if (!val || val < 1) { errEl.style.display = 'block'; return; }
+  errEl.style.display = 'none';
+  appData.rewards[pendingEditRewardIdx].points = val;
+  saveData(appData);
+  closeModal('editPtsModal');
+  renderReward();
+  renderRewardSettings();
+}
+
+// ─── Fate reward inline editing ──────────────────────────────────────────────
+let fateEditingIdx = -1;
+let fateEditItems = [];
+
+function startEditFate(i) {
+  fateEditingIdx = i;
+  fateEditItems = [...appData.rewards[i].fateItems];
+  renderRewardSettings();
+  // scroll to the editing area
+  setTimeout(() => {
+    const el = document.getElementById('fateEditArea' + i);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 50);
+}
+
+function cancelEditFate() {
+  fateEditingIdx = -1;
+  fateEditItems = [];
+  renderRewardSettings();
+}
+
+function addFateEditItem() {
+  const input = document.getElementById('fateEditItemInput');
+  const val = (input.value || '').trim();
+  if (!val) return;
+  fateEditItems.push(val);
+  input.value = '';
+  renderRewardSettings();
+  setTimeout(() => document.getElementById('fateEditItemInput') && document.getElementById('fateEditItemInput').focus(), 50);
+}
+
+function removeFateEditItem(j) {
+  fateEditItems.splice(j, 1);
+  renderRewardSettings();
+}
+
+function saveEditFate(i) {
+  if (fateEditItems.length < 2) {
+    alert('命運與機會至少需要 2 個獎品！');
+    return;
+  }
+  const ptsEl = document.getElementById('fateEditPts');
+  const pts = parseInt(ptsEl ? ptsEl.value : 0);
+  if (!pts || pts < 1) { alert('請輸入有效的點數！'); return; }
+  appData.rewards[i].fateItems = [...fateEditItems];
+  appData.rewards[i].points = pts;
+  saveData(appData);
+  fateEditingIdx = -1;
+  fateEditItems = [];
+  renderRewardSettings();
+}
 
 function checkDeletePw() {
   const pw = document.getElementById('deletePwInput').value;
   if (pw === '1234') {
     closeModal('deletePwModal');
-    if (pendingDeleteAction === 'enter') {
+    if (pendingDeleteAction === 'editRewardPts') {
+      // show the edit points modal
+      const r = appData.rewards[pendingEditRewardIdx];
+      document.getElementById('editPtsMessage').textContent =
+        `目前：${r.points} 點　｜　獎勵：${r.name || '命運與機會'}`;
+      document.getElementById('editPtsInput').value = r.points;
+      document.getElementById('editPtsError').style.display = 'none';
+      openModal('editPtsModal');
+      setTimeout(() => document.getElementById('editPtsInput').focus(), 100);
+    } else if (pendingDeleteAction === 'enter') {
       deleteMode = true;
       renderReward();
     } else if (pendingDeleteAction === 'confirm') {
