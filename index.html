@@ -683,6 +683,36 @@
   .bounce-in { animation: bounceIn 0.5s ease; }
 
   /* ===== Reward Type Toggle ===== */
+  /* ── Admin page tabs ── */
+  .admin-tab-bar {
+    display: flex;
+    gap: 0;
+    margin-bottom: 18px;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 2px solid #764ba2;
+    background: #fff;
+  }
+  .admin-tab-bar button {
+    flex: 1;
+    padding: 11px 6px;
+    border: none;
+    background: #fff;
+    color: #764ba2;
+    font-weight: 700;
+    font-size: 0.88em;
+    cursor: pointer;
+    transition: all 0.2s;
+    border-right: 1px solid #e0d0f5;
+  }
+  .admin-tab-bar button:last-child { border-right: none; }
+  .admin-tab-bar button.active {
+    background: linear-gradient(135deg, #764ba2, #667eea);
+    color: #fff;
+  }
+  .admin-tab-panel { display: none; }
+  .admin-tab-panel.active { display: block; }
+
   .reward-type-toggle {
     display: flex;
     gap: 0;
@@ -1055,144 +1085,170 @@
 
 <!-- ========== ADMIN PAGE ========== -->
 <div id="page-admin" class="page">
-  <!-- Main Task List -->
-  <div class="card">
-    <div class="flex-between mb-20">
-      <h2>⚙️ 任務管理</h2>
-      <button class="btn btn-primary btn-small" onclick="showAddMainTask()">＋ 新增主任務</button>
-    </div>
-    <div id="adminTaskList"></div>
+
+  <!-- ── Tab bar ── -->
+  <div class="admin-tab-bar">
+    <button id="adminTab-tasks"   class="active" onclick="switchAdminTab('tasks')">⚙️ 任務</button>
+    <button id="adminTab-rewards"            onclick="switchAdminTab('rewards')">🎁 獎勵</button>
+    <button id="adminTab-cards"              onclick="switchAdminTab('cards')">🃏 圖鑑</button>
+    <button id="adminTab-ei"                 onclick="switchAdminTab('ei')">📦 匯出入</button>
   </div>
 
-  <!-- Reward Settings -->
-  <div class="card">
-    <h2>🎁 獎勵設定</h2>
-    <div id="rewardSettingsList"></div>
-    <hr style="border:none;border-top:1px solid #eee;margin:16px 0;">
-    <div style="margin-bottom:10px;">
-      <label>新增獎勵</label>
-      <div class="reward-type-toggle">
-        <button id="rewardTypeText" class="active" onclick="setRewardType('text')">📝 自訂文字</button>
-        <button id="rewardTypeFate" onclick="setRewardType('fate')">🎰 命運與機會</button>
+  <!-- ══════════════════════════════════════
+       TAB 1: 任務管理
+       ══════════════════════════════════════ -->
+  <div id="adminPanel-tasks" class="admin-tab-panel active">
+    <div class="card">
+      <div class="flex-between mb-20">
+        <h2>⚙️ 任務管理</h2>
+        <button class="btn btn-primary btn-small" onclick="showAddMainTask()">＋ 新增主任務</button>
       </div>
+      <div id="adminTaskList"></div>
     </div>
-    <div class="mt-10" style="display:flex;gap:8px;align-items:start;">
-      <input type="number" id="rewardPts" placeholder="所需點數" min="1" style="flex:1;margin-top:0;">
-      <div style="flex:2;" id="rewardInputArea">
-        <input type="text" id="rewardName" placeholder="獎勵名稱（例：看電視30分鐘）" style="margin-bottom:0;">
-      </div>
-      <button class="btn btn-warning btn-small" onclick="addRewardSetting()" style="margin-top:2px;">新增</button>
-    </div>
-    <!-- Fate items input area (shown when fate type selected) -->
-    <div id="fateInputArea" style="display:none;margin-top:12px;">
-      <div style="display:flex;gap:8px;margin-bottom:8px;">
-        <input type="text" id="fateItemInput" placeholder="輸入獎品名稱（例：糖果）" style="flex:1;margin-bottom:0;"
-          onkeydown="if(event.key==='Enter')addFateItem()">
-        <button class="btn btn-primary btn-small" onclick="addFateItem()">＋ 加入</button>
-      </div>
-      <div id="fateItemsList" class="fate-items-list"></div>
-    </div>
-  </div>
+  </div><!-- /adminPanel-tasks -->
 
-  <!-- Export / Import -->
-  <div class="card ei-card">
-    <h2>📦 匯出 / 匯入</h2>
-    <div class="ei-section">
-      <!-- Export -->
-      <div class="ei-box">
-        <h3>📤 匯出資料</h3>
-        <p>將資料匯出為 JSON 檔案</p>
-        <div class="ei-check-group">
-          <label><input type="checkbox" id="exportTasks" checked> 📋 任務</label>
-          <label><input type="checkbox" id="exportRewards" checked> 🎁 獎勵設定</label>
-          <label><input type="checkbox" id="exportRecords" checked> 📊 任務紀錄</label>
+  <!-- ══════════════════════════════════════
+       TAB 3: 圖鑑管理
+       ══════════════════════════════════════ -->
+  <div id="adminPanel-cards" class="admin-tab-panel">
+    <div class="card">
+      <div class="flex-between mb-20">
+        <h2>🃏 圖鑑管理</h2>
+        <span style="font-size:0.85em;color:#888;" id="cardAdminCount"></span>
+      </div>
+      <!-- Gallery button name setting -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:10px 14px;background:#f8f9ff;border-radius:10px;">
+        <label style="margin:0;font-size:0.9em;color:#555;white-space:nowrap;">🏷️ 按鈕名稱</label>
+        <input type="text" id="cardGalleryNameInput" placeholder="圖鑑"
+          style="flex:1;margin:0;padding:6px 10px;font-size:0.9em;"
+          oninput="updateCardGalleryName(this.value)">
+        <span style="font-size:0.8em;color:#aaa;white-space:nowrap;">（預設：圖鑑）</span>
+      </div>
+
+      <!-- Add card controls -->
+      <div style="background:#f8f9ff;border-radius:12px;padding:16px;margin-bottom:16px;">
+        <div style="font-weight:600;margin-bottom:10px;color:#555;">➕ 新增圖鑑</div>
+
+        <!-- Category selector -->
+        <div style="margin-bottom:10px;">
+          <label style="margin-bottom:4px;">類別</label>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
+            <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              <input type="radio" name="cardCat" value="common" checked> 普卡
+            </label>
+            <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              <input type="radio" name="cardCat" value="silver"> 銀卡
+            </label>
+            <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              <input type="radio" name="cardCat" value="gold"> 金卡
+            </label>
+            <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
+              <input type="radio" name="cardCat" value="diamond"> 鑽石卡
+            </label>
+          </div>
         </div>
-        <button class="btn btn-primary btn-small" onclick="exportData()">📤 匯出</button>
-      </div>
-      <!-- Import -->
-      <div class="ei-box">
-        <h3>📥 匯入資料</h3>
-        <p>從 JSON 檔案匯入資料</p>
-        <div class="ei-check-group">
-          <label><input type="checkbox" id="importTasks" checked> 📋 任務</label>
-          <label><input type="checkbox" id="importRewards" checked> 🎁 獎勵設定</label>
-          <label><input type="checkbox" id="importRecords" checked> 📊 任務紀錄</label>
+
+        <!-- Card name -->
+        <div style="margin-bottom:10px;">
+          <label style="margin-bottom:4px;">圖鑑名稱（選填）</label>
+          <input type="text" id="cardNameInput" placeholder="例：皮卡丘、No.025…" style="margin-bottom:0;">
         </div>
-        <div class="import-drop-zone" id="importDropZone" onclick="document.getElementById('importFileInput').click()">
-          📁 點擊選擇檔案 或 拖曳檔案至此
+
+        <!-- Method A: local file -->
+        <div style="margin-bottom:8px;">
+          <div style="font-size:0.9em;color:#666;margin-bottom:6px;">📁 方法 A：選擇本機圖片</div>
+          <input type="file" id="cardFileInput" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic" style="display:none;" onchange="handleCardFile(event)">
+          <button class="btn btn-primary btn-small" onclick="document.getElementById('cardFileInput').click()">選擇圖片</button>
         </div>
-        <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="handleImportFile(event)">
-        <div class="import-result" id="importResult"></div>
+
+        <!-- Method B: JSON URL file -->
+        <div style="border-top:1px solid #e5e5e5;padding-top:10px;">
+          <div style="font-size:0.9em;color:#666;margin-bottom:6px;">📄 方法 B：載入 JSON 定義檔（內含圖片 URL）</div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input type="file" id="cardJsonInput" accept=".json" style="display:none;" onchange="handleCardJson(event)">
+            <button class="btn btn-warning btn-small" onclick="document.getElementById('cardJsonInput').click()">選擇 JSON 檔</button>
+            <span style="font-size:0.78em;color:#aaa;">格式：[{"name":"…","url":"https://…"}, …]</span>
+          </div>
+        </div>
       </div>
-    </div>
-  </div>
 
-  <!-- Card Management -->
-  <div class="card">
-    <div class="flex-between mb-20">
-      <h2>🃏 圖鑑管理</h2>
-      <span style="font-size:0.85em;color:#888;" id="cardAdminCount"></span>
+      <!-- Existing cards list -->
+      <div id="cardAdminList"></div>
     </div>
-    <!-- Gallery button name setting -->
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px;padding:10px 14px;background:#f8f9ff;border-radius:10px;">
-      <label style="margin:0;font-size:0.9em;color:#555;white-space:nowrap;">🏷️ 按鈕名稱</label>
-      <input type="text" id="cardGalleryNameInput" placeholder="圖鑑"
-        style="flex:1;margin:0;padding:6px 10px;font-size:0.9em;"
-        oninput="updateCardGalleryName(this.value)">
-      <span style="font-size:0.8em;color:#aaa;white-space:nowrap;">（預設：圖鑑）</span>
-    </div>
+  </div><!-- /adminPanel-cards -->
 
-    <!-- Add card controls -->
-    <div style="background:#f8f9ff;border-radius:12px;padding:16px;margin-bottom:16px;">
-      <div style="font-weight:600;margin-bottom:10px;color:#555;">➕ 新增圖鑑</div>
-
-      <!-- Category selector -->
+  <!-- ══════════════════════════════════════
+       TAB 2: 獎勵設定
+       ══════════════════════════════════════ -->
+  <div id="adminPanel-rewards" class="admin-tab-panel">
+    <div class="card">
+      <h2>🎁 獎勵設定</h2>
+      <div id="rewardSettingsList"></div>
+      <hr style="border:none;border-top:1px solid #eee;margin:16px 0;">
       <div style="margin-bottom:10px;">
-        <label style="margin-bottom:4px;">類別</label>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
-            <input type="radio" name="cardCat" value="common" checked> 普卡
-          </label>
-          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
-            <input type="radio" name="cardCat" value="silver"> 銀卡
-          </label>
-          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
-            <input type="radio" name="cardCat" value="gold"> 金卡
-          </label>
-          <label style="font-weight:500;cursor:pointer;display:flex;align-items:center;gap:4px;">
-            <input type="radio" name="cardCat" value="diamond"> 鑽石卡
-          </label>
+        <label>新增獎勵</label>
+        <div class="reward-type-toggle">
+          <button id="rewardTypeText" class="active" onclick="setRewardType('text')">📝 自訂文字</button>
+          <button id="rewardTypeFate" onclick="setRewardType('fate')">🎰 命運與機會</button>
         </div>
       </div>
-
-      <!-- Card name -->
-      <div style="margin-bottom:10px;">
-        <label style="margin-bottom:4px;">圖鑑名稱（選填）</label>
-        <input type="text" id="cardNameInput" placeholder="例：皮卡丘、No.025…" style="margin-bottom:0;">
+      <div class="mt-10" style="display:flex;gap:8px;align-items:start;">
+        <input type="number" id="rewardPts" placeholder="所需點數" min="1" style="flex:1;margin-top:0;">
+        <div style="flex:2;" id="rewardInputArea">
+          <input type="text" id="rewardName" placeholder="獎勵名稱（例：看電視30分鐘）" style="margin-bottom:0;">
+        </div>
+        <button class="btn btn-warning btn-small" onclick="addRewardSetting()" style="margin-top:2px;">新增</button>
       </div>
-
-      <!-- Method A: local file -->
-      <div style="margin-bottom:8px;">
-        <div style="font-size:0.9em;color:#666;margin-bottom:6px;">📁 方法 A：選擇本機圖片</div>
-        <input type="file" id="cardFileInput" accept="image/*,.jpg,.jpeg,.png,.gif,.webp,.heic" style="display:none;" onchange="handleCardFile(event)">
-        <button class="btn btn-primary btn-small" onclick="document.getElementById('cardFileInput').click()">選擇圖片</button>
+      <!-- Fate items input area (shown when fate type selected) -->
+      <div id="fateInputArea" style="display:none;margin-top:12px;">
+        <div style="display:flex;gap:8px;margin-bottom:8px;">
+          <input type="text" id="fateItemInput" placeholder="輸入獎品名稱（例：糖果）" style="flex:1;margin-bottom:0;"
+            onkeydown="if(event.key==='Enter')addFateItem()">
+          <button class="btn btn-primary btn-small" onclick="addFateItem()">＋ 加入</button>
+        </div>
+        <div id="fateItemsList" class="fate-items-list"></div>
       </div>
+    </div>
+  </div><!-- /adminPanel-rewards -->
 
-      <!-- Method B: JSON URL file -->
-      <div style="border-top:1px solid #e5e5e5;padding-top:10px;">
-        <div style="font-size:0.9em;color:#666;margin-bottom:6px;">📄 方法 B：載入 JSON 定義檔（內含圖片 URL）</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-          <input type="file" id="cardJsonInput" accept=".json" style="display:none;" onchange="handleCardJson(event)">
-          <button class="btn btn-warning btn-small" onclick="document.getElementById('cardJsonInput').click()">選擇 JSON 檔</button>
-          <span style="font-size:0.78em;color:#aaa;">格式：[{"name":"…","url":"https://…"}, …]</span>
+  <!-- ══════════════════════════════════════
+       TAB 3: 匯出 / 匯入
+       ══════════════════════════════════════ -->
+  <div id="adminPanel-ei" class="admin-tab-panel">
+    <div class="card ei-card">
+      <h2>📦 匯出 / 匯入</h2>
+      <div class="ei-section">
+        <!-- Export -->
+        <div class="ei-box">
+          <h3>📤 匯出資料</h3>
+          <p>將資料匯出為 JSON 檔案</p>
+          <div class="ei-check-group">
+            <label><input type="checkbox" id="exportTasks" checked> 📋 任務</label>
+            <label><input type="checkbox" id="exportRewards" checked> 🎁 獎勵設定</label>
+            <label><input type="checkbox" id="exportRecords" checked> 📊 任務紀錄</label>
+          </div>
+          <button class="btn btn-primary btn-small" onclick="exportData()">📤 匯出</button>
+        </div>
+        <!-- Import -->
+        <div class="ei-box">
+          <h3>📥 匯入資料</h3>
+          <p>從 JSON 檔案匯入資料</p>
+          <div class="ei-check-group">
+            <label><input type="checkbox" id="importTasks" checked> 📋 任務</label>
+            <label><input type="checkbox" id="importRewards" checked> 🎁 獎勵設定</label>
+            <label><input type="checkbox" id="importRecords" checked> 📊 任務紀錄</label>
+          </div>
+          <div class="import-drop-zone" id="importDropZone" onclick="document.getElementById('importFileInput').click()">
+            📁 點擊選擇檔案 或 拖曳檔案至此
+          </div>
+          <input type="file" id="importFileInput" accept=".json" style="display:none;" onchange="handleImportFile(event)">
+          <div class="import-result" id="importResult"></div>
         </div>
       </div>
     </div>
+  </div><!-- /adminPanel-ei -->
 
-    <!-- Existing cards list -->
-    <div id="cardAdminList"></div>
-  </div>
-</div>
+</div><!-- /page-admin -->
 
 <!-- ========== EXECUTION PAGE ========== -->
 <div id="page-exec" class="page">
@@ -1619,7 +1675,7 @@ function showPage(name) {
   if (navBtn) navBtn.classList.add('active');
 
   if (name === 'home') renderHome();
-  if (name === 'admin') { renderAdmin(); renderCardAdmin(); }
+  if (name === 'admin') { switchAdminTab(currentAdminTab); }
   if (name === 'reward') renderReward();
   if (name === 'cards') {
     exitCardEditMode();
@@ -1727,6 +1783,22 @@ function startEditTaskName(taskIdx) {
 // ADMIN PAGE
 // ============================================
 let editingTaskIndex = null;
+let currentAdminTab = 'tasks'; // remember which tab is active
+
+function switchAdminTab(tab) {
+  currentAdminTab = tab;
+  // Update tab buttons and panels
+  ['tasks', 'rewards', 'cards', 'ei'].forEach(t => {
+    const btn = document.getElementById('adminTab-' + t);
+    const panel = document.getElementById('adminPanel-' + t);
+    if (btn)   btn.classList.toggle('active', t === tab);
+    if (panel) panel.classList.toggle('active', t === tab);
+  });
+  // Render the tab's content if needed
+  if (tab === 'tasks')   { renderAdmin(); }
+  if (tab === 'rewards') { renderRewardSettings(); }
+  if (tab === 'cards')   { renderCardAdmin(); }
+}
 
 function renderAdmin() {
   const container = document.getElementById('adminTaskList');
