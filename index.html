@@ -1209,6 +1209,20 @@
         </div>
         <div id="fateItemsList" class="fate-items-list"></div>
       </div>
+      <!-- Card cooldown area (shown when card type selected) -->
+      <div id="cardCooldownArea" style="display:none;margin-top:12px;background:#f0f4ff;border-radius:10px;padding:12px;">
+        <div style="font-size:0.88em;color:#555;margin-bottom:8px;font-weight:600;">⏱️ 兌換限制（冷卻時間）</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span style="font-size:0.9em;color:#555;white-space:nowrap;">每隔</span>
+          <input type="number" id="cardCooldownHours" value="1" min="0.1" step="0.5"
+            style="width:70px;margin:0;padding:5px 8px;font-size:0.9em;">
+          <span style="font-size:0.9em;color:#555;white-space:nowrap;">小時，可兌換</span>
+          <input type="number" id="cardCooldownCount" value="1" min="1" step="1"
+            style="width:60px;margin:0;padding:5px 8px;font-size:0.9em;">
+          <span style="font-size:0.9em;color:#555;white-space:nowrap;">張圖鑑</span>
+        </div>
+        <div style="font-size:0.78em;color:#aaa;margin-top:6px;">預設：每 1 小時可兌換 1 張</div>
+      </div>
     </div>
   </div><!-- /adminPanel-rewards -->
 
@@ -2069,6 +2083,7 @@ function setRewardType(type) {
   document.getElementById('rewardTypeFate').classList.toggle('active', type === 'fate');
   document.getElementById('rewardTypeCard').classList.toggle('active', type === 'card');
   document.getElementById('fateInputArea').style.display = type === 'fate' ? 'block' : 'none';
+  document.getElementById('cardCooldownArea').style.display = type === 'card' ? 'block' : 'none';
   const nameInput = document.getElementById('rewardName');
   if (type === 'fate') {
     nameInput.value = '命運與機會';
@@ -2076,8 +2091,11 @@ function setRewardType(type) {
     nameInput.style.background = '#f0ecf5';
   } else if (type === 'card') {
     nameInput.value = '兌換圖鑑';
-    nameInput.readOnly = false;   // allow custom label, e.g. "抽一張圖鑑"
+    nameInput.readOnly = false;
     nameInput.style.background = '';
+    // Reset cooldown inputs to defaults
+    document.getElementById('cardCooldownHours').value = '1';
+    document.getElementById('cardCooldownCount').value = '1';
   } else {
     nameInput.value = '';
     nameInput.readOnly = false;
@@ -2188,11 +2206,40 @@ function renderRewardSettings() {
           </div>`;
       }
       if (r.type === 'card') {
+        const hours = r.cooldownHours || 1;
+        const count = r.cooldownCount || 1;
+        const cooldownLabel = `每 ${hours} 小時 ${count} 張`;
         return `
-          <div class="reward-setting">
+          <div class="reward-setting" style="flex-wrap:wrap;">
             <span class="rw-pts">${r.points} 點</span>
-            <span style="flex:1">= 🃏 ${esc(r.name)}</span>
+            <span style="flex:1">= 🃏 ${esc(r.name)}
+              <span style="font-size:0.75em;color:#888;margin-left:6px;">⏱️ ${cooldownLabel}</span>
+            </span>
+            <button class="btn btn-primary btn-small" onclick="startEditCard(${i})" style="padding:4px 10px;font-size:0.8em;">✏️ 修改</button>
             <button class="btn btn-danger btn-small" onclick="removeReward(${i})">✕</button>
+          </div>
+          <div id="cardEditArea${i}" style="display:none;width:100%;margin-top:4px;padding:12px;background:#f0f4ff;border-radius:10px;">
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+              <label style="font-size:0.88em;white-space:nowrap;">名稱：</label>
+              <input id="cardEditName${i}" type="text" value="${esc(r.name)}"
+                style="flex:1;min-width:100px;margin:0;padding:5px 8px;font-size:0.9em;">
+              <label style="font-size:0.88em;white-space:nowrap;">點數：</label>
+              <input id="cardEditPts${i}" type="number" value="${r.points}" min="1"
+                style="width:65px;margin:0;padding:5px 8px;font-size:0.9em;">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+              <span style="font-size:0.88em;white-space:nowrap;">每隔</span>
+              <input id="cardEditHours${i}" type="number" value="${hours}" min="0.1" step="0.5"
+                style="width:65px;margin:0;padding:5px 8px;font-size:0.9em;">
+              <span style="font-size:0.88em;white-space:nowrap;">小時，可兌換</span>
+              <input id="cardEditCount${i}" type="number" value="${count}" min="1"
+                style="width:55px;margin:0;padding:5px 8px;font-size:0.9em;">
+              <span style="font-size:0.88em;white-space:nowrap;">張</span>
+            </div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-success btn-small" onclick="saveEditCard(${i})" style="flex:1;">💾 儲存</button>
+              <button class="btn btn-danger btn-small" onclick="cancelEditCard(${i})" style="flex:1;">取消</button>
+            </div>
           </div>`;
       }
       return `
@@ -2235,7 +2282,14 @@ function addRewardSetting() {
     renderFateItemsList();
   } else if (currentRewardType === 'card') {
     const name = document.getElementById('rewardName').value.trim() || '兌換圖鑑';
-    appData.rewards.push({ type: 'card', points: pts, name });
+    const cooldownHours = parseFloat(document.getElementById('cardCooldownHours').value) || 1;
+    const cooldownCount = parseInt(document.getElementById('cardCooldownCount').value) || 1;
+    appData.rewards.push({
+      type: 'card', points: pts, name,
+      cooldownHours: Math.max(0.1, cooldownHours),
+      cooldownCount: Math.max(1, cooldownCount),
+      redeemLog: []
+    });
   } else {
     const name = document.getElementById('rewardName').value.trim();
     if (!name) return;
@@ -2506,14 +2560,33 @@ function renderReward() {
       const canRedeem = appData.score >= r.points;
       const isFate = r.type === 'fate';
       const isCard = r.type === 'card';
+
+      // Cooldown info for card rewards
+      let cooldownInfo = '';
+      let cardBlocked = false;
+      if (isCard) {
+        const cd = checkCardCooldown(r);
+        if (!cd.allowed) {
+          cardBlocked = true;
+          cooldownInfo = `<span style="font-size:0.75em;color:#eb3349;margin-left:6px;">⏱️ ${formatWaitTime(cd.waitMs)} 後可用</span>`;
+        } else {
+          const limit = r.cooldownCount || 1;
+          cooldownInfo = `<span style="font-size:0.75em;color:#888;margin-left:6px;">⏱️ 每 ${r.cooldownHours||1} 小時 ${limit} 張（剩 ${cd.remaining} 張）</span>`;
+        }
+      }
+
       const label = isFate
         ? `🎰 命運與機會 <span class="fate-badge">${r.fateItems.length} 個獎品</span>`
         : isCard
-          ? `🃏 ${esc(r.name)}`
+          ? `🃏 ${esc(r.name)}${cooldownInfo}`
           : esc(r.name);
-      const btnLabel = canRedeem
-        ? (isFate ? '🎰 轉盤' : isCard ? '🃏 抽卡' : '🎁 兌換')
-        : '點數不足';
+
+      const blocked = !canRedeem || cardBlocked;
+      const btnLabel = !canRedeem ? '點數不足'
+        : cardBlocked ? '冷卻中'
+        : isFate ? '🎰 轉盤'
+        : isCard ? '🃏 抽卡'
+        : '🎁 兌換';
       return `
         <div class="reward-setting">
           <span class="rw-pts" style="display:flex;align-items:center;gap:4px;">
@@ -2522,9 +2595,9 @@ function renderReward() {
               style="border:none;background:none;cursor:pointer;font-size:0.82em;color:#764ba2;padding:0 2px;line-height:1;">✏️</button>
           </span>
           <span style="flex:1">= ${label}</span>
-          <button class="btn ${canRedeem ? 'btn-warning' : ''} btn-small"
-            ${canRedeem ? `onclick="tryRedeem(${i})"` : 'disabled'}
-            style="${canRedeem ? '' : 'opacity:0.4;cursor:not-allowed;background:#ccc;color:#888;'}">
+          <button class="btn ${blocked ? '' : 'btn-warning'} btn-small"
+            ${blocked ? 'disabled' : `onclick="tryRedeem(${i})"`}
+            style="${blocked ? 'opacity:0.4;cursor:not-allowed;background:#ccc;color:#888;' : ''}">
             ${btnLabel}
           </button>
         </div>`;
@@ -2648,6 +2721,26 @@ function confirmEditPts() {
 // ─── Fate reward inline editing ──────────────────────────────────────────────
 let fateEditingIdx = -1;
 let fateEditItems = [];
+
+// ─── Card reward inline editing ──────────────────────────────────────────────
+function startEditCard(i) {
+  document.getElementById('cardEditArea' + i).style.display = 'block';
+}
+function cancelEditCard(i) {
+  document.getElementById('cardEditArea' + i).style.display = 'none';
+}
+function saveEditCard(i) {
+  const name  = (document.getElementById('cardEditName'  + i).value || '').trim() || '兌換圖鑑';
+  const pts   = parseInt(document.getElementById('cardEditPts'   + i).value) || 1;
+  const hours = parseFloat(document.getElementById('cardEditHours' + i).value) || 1;
+  const count = parseInt(document.getElementById('cardEditCount' + i).value) || 1;
+  appData.rewards[i].name          = name;
+  appData.rewards[i].points        = Math.max(1, pts);
+  appData.rewards[i].cooldownHours = Math.max(0.1, hours);
+  appData.rewards[i].cooldownCount = Math.max(1, count);
+  saveData(appData);
+  renderRewardSettings();
+}
 
 function startEditFate(i) {
   fateEditingIdx = i;
@@ -2914,6 +3007,30 @@ function executeDeleteSpecials() {
   renderReward();
 }
 
+// ─── Card cooldown helpers ────────────────────────────────────────────────────
+function checkCardCooldown(r) {
+  const now = Date.now();
+  const windowMs = (r.cooldownHours || 1) * 3600000;
+  const limit = r.cooldownCount || 1;
+  const log = r.redeemLog || [];
+  const recent = log.filter(t => now - t < windowMs);
+  if (recent.length >= limit) {
+    const earliest = Math.min(...recent);
+    const nextAt = earliest + windowMs;
+    return { allowed: false, waitMs: nextAt - now };
+  }
+  return { allowed: true, remaining: limit - recent.length };
+}
+
+function formatWaitTime(ms) {
+  const totalMins = Math.ceil(ms / 60000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  if (h > 0 && m > 0) return `${h} 小時 ${m} 分鐘`;
+  if (h > 0) return `${h} 小時`;
+  return `${m} 分鐘`;
+}
+
 function tryRedeem(i) {
   pendingRedeemIndex = i;
   const r = appData.rewards[i];
@@ -2921,9 +3038,20 @@ function tryRedeem(i) {
     // Open wheel modal
     openWheelModal(i);
   } else if (r.type === 'card') {
-    // Deduct points then show card draw
     if (appData.score < r.points) return;
+    // ── Cooldown check ────────────────────────────────────────────
+    const coolResult = checkCardCooldown(r);
+    if (!coolResult.allowed) {
+      alert(`⏱️ 兌換冷卻中！\n還需等待 ${formatWaitTime(coolResult.waitMs)} 才能再兌換。`);
+      return;
+    }
+    // ── Deduct points, log timestamp, show card draw ──────────────
     appData.score -= r.points;
+    if (!r.redeemLog) r.redeemLog = [];
+    r.redeemLog.push(Date.now());
+    // Keep log tidy — only entries within last 7 days
+    const sevenDays = 7 * 24 * 3600000;
+    r.redeemLog = r.redeemLog.filter(t => Date.now() - t < sevenDays);
     saveData(appData);
     speak(`消耗 ${r.points} 點，來抽一張圖鑑！`);
     showCardDraw(() => { renderReward(); });
