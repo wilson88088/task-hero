@@ -3965,8 +3965,14 @@ async function showCardDraw(callback) {
   const pool = appData.cards || [];
   if (pool.length === 0) { callback(); return; }
 
-  // Pick a random card
-  const card = pool[Math.floor(Math.random() * pool.length)];
+  // Prefer uncollected cards to avoid duplicates
+  const collectedSet = new Set((appData.collectedCards || []).map(c => c.cardId));
+  const uncollected = pool.filter(c => !collectedSet.has(c.id));
+  const allCollected = uncollected.length === 0;
+  const drawPool = allCollected ? pool : uncollected;
+
+  // Pick a random card from the appropriate pool
+  const card = drawPool[Math.floor(Math.random() * drawPool.length)];
   drawnCardId = card.id;
 
   // Resolve image
@@ -3979,9 +3985,10 @@ async function showCardDraw(callback) {
   catEl.textContent = catInfo.label;
   catEl.className = 'card-draw-cat ' + catInfo.cls;
 
-  // Check if already collected
-  const alreadyOwned = (appData.collectedCards || []).some(c => c.cardId === card.id);
-  document.getElementById('cardDrawAlready').textContent = alreadyOwned ? '（已收藏過）' : '';
+  // Show collection status
+  const alreadyOwned = collectedSet.has(card.id);
+  document.getElementById('cardDrawAlready').textContent =
+    allCollected ? '🎉 已集齊全部圖鑑！' : alreadyOwned ? '（已收藏過）' : '';
 
   document.getElementById('cardDrawOverlay').classList.add('show');
 }
