@@ -354,6 +354,7 @@
   .card-category-title.silver  { background: linear-gradient(135deg,#e0e0e0,#c0c0c0); color: #444; }
   .card-category-title.gold    { background: linear-gradient(135deg,#ffe066,#f5a623); color: #7a4800; }
   .card-category-title.diamond { background: linear-gradient(135deg,#a8edff,#5bc8fb); color: #005a7a; }
+  .card-category-title.hero    { background: linear-gradient(135deg,#ff6b6b,#ffd93d); color: #7a0000; }
   .card-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
@@ -390,6 +391,7 @@
   .card-thumb.silver { box-shadow: 0 2px 8px rgba(180,180,180,0.6); border: 2px solid #c0c0c0; }
   .card-thumb.gold   { box-shadow: 0 2px 12px rgba(245,166,35,0.5); border: 2px solid #f5a623; }
   .card-thumb.diamond{ box-shadow: 0 2px 12px rgba(91,200,251,0.5); border: 2px solid #5bc8fb; }
+  .card-thumb.hero   { box-shadow: 0 2px 14px rgba(255,107,107,0.6); border: 2px solid #ff6b6b; }
   .card-empty-cat { color: #bbb; font-size: 0.88em; padding: 6px 0 12px; }
 
   /* Card draw modal (gacha-style reveal) */
@@ -446,6 +448,7 @@
   .card-draw-cat.silver  { background:linear-gradient(90deg,#aaa,#ccc); color:#333; }
   .card-draw-cat.gold    { background:linear-gradient(90deg,#f5a623,#ffe066); color:#7a4800; }
   .card-draw-cat.diamond { background:linear-gradient(90deg,#5bc8fb,#a8edff); color:#005a7a; }
+  .card-draw-cat.hero    { background:linear-gradient(90deg,#ff6b6b,#ffd93d); color:#7a0000; }
   .card-draw-actions {
     display: flex; gap: 12px; justify-content: center;
   }
@@ -3712,8 +3715,9 @@ const CARD_CATEGORIES = [
   { key: 'silver',  label: '銀卡',   cls: 'silver'  },
   { key: 'gold',    label: '金卡',   cls: 'gold'    },
   { key: 'diamond', label: '鑽石卡', cls: 'diamond' },
+  { key: 'hero',    label: '英雄卡', cls: 'hero'    },
 ];
-const CAT_LABELS = { common:'普卡', silver:'銀卡', gold:'金卡', diamond:'鑽石卡' };
+const CAT_LABELS = { common:'普卡', silver:'銀卡', gold:'金卡', diamond:'鑽石卡', hero:'英雄卡' };
 
 // ---- Render gallery page (shows only COLLECTED cards) ----
 async function renderCards() {
